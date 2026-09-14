@@ -7,6 +7,7 @@ from typing import Any
 
 from .contracts import ContractManifest
 from .km import Reasoner, ReasonerError
+from .axioms import check_axiom
 from .ofn import (
     FunctionalSyntaxError,
     add_axioms,
@@ -39,7 +40,7 @@ class Check:
         return value
 
 
-ReceiverAssertion = tuple[str, str]
+ReceiverAssertion = tuple[str, str] | str
 """A (class IRI, individual IRI) pair asserted by the receiving node itself.
 
 Receiver assertions carry facts the receiver trusts from its own sources (a
@@ -47,14 +48,38 @@ reputation ledger, an access-control list, a local registry). They bypass the
 sender allowlist because the sender never wrote them, but they are still
 rendered through the checked serializer and recorded in the report so a
 decision can be audited and repeated.
+
+A receiver assertion is either a (class IRI, individual IRI) pair or one
+complete axiom string built with `research_commons.axioms` (closures, scope
+axioms, negated facts about the receiver's own holdings). Axiom strings are
+re-checked by `axioms.check_axiom` before they reach the reasoner.
+"""
+
+Probe = tuple[str, str]
+"""A (check kind, class IRI) instance check the receiver wants reported.
+
+Probes run on the same asserted ontology as the decision checks and are listed
+in the report, but they never change the report status. Nodes use them to
+explain a decision (which credential covered a task, why a scope failed).
 """
 
 
 def receiver_axioms(assertions: Iterable[ReceiverAssertion]) -> list[str]:
     axioms = []
-    for class_iri, individual in assertions:
+    for assertion in assertions:
+        if isinstance(assertion, str):
+            axioms.append(check_axiom(assertion))
+            continue
+        class_iri, individual = assertion
         axioms.append(f"ClassAssertion({render_iri(class_iri)} {render_iri(individual)})")
     return axioms
+
+
+def _describe(assertion: ReceiverAssertion) -> str:
+    if isinstance(assertion, str):
+        return assertion
+    class_iri, individual = assertion
+    return f"{individual} : {class_iri}"
 
 
 class SemanticValidator:
@@ -73,9 +98,14 @@ class SemanticValidator:
         return axioms
 
     def validate(
-        self, document: dict[str, Any], *, receiver_assertions: Iterable[ReceiverAssertion] = ()
+        self,
+        document: dict[str, Any],
+        *,
+        receiver_assertions: Iterable[ReceiverAssertion] = (),
+        probes: Iterable[Probe] = (),
     ) -> dict[str, Any]:
         receiver_assertions = list(receiver_assertions)
+        probes = list(probes)
         checks: list[Check] = []
         started = time.monotonic()
         try:
@@ -112,7 +142,7 @@ class SemanticValidator:
                     "receiver-assertions",
                     "entailed",
                     0,
-                    "; ".join(f"{individual} : {class_iri}" for class_iri, individual in receiver_assertions),
+                    "; ".join(_describe(assertion) for assertion in receiver_assertions),
                 )
             )
         consistency = self._consistency_check(asserted)
@@ -148,6 +178,8 @@ class SemanticValidator:
             status = output.status
         else:
             status = "entailed"
+        for kind, class_iri in probes:
+            checks.append(self._instance_check(asserted, document["@id"], class_iri, kind))
         return self._report(document, status, checks)
 
     def check_composition(self, produced_class: str, accepted_class: str) -> Check:
