@@ -135,3 +135,62 @@ def test_composition_uses_subsumption_probe(repository_root):
         "https://w3id.org/research-commons/v0.1/ResearchContribution",
     )
     assert check.status == "entailed"
+
+
+class RecordingReasoner(FixtureReasoner):
+    def __init__(self):
+        self.ontologies = []
+
+    def classify(self, ontology: str) -> Classification:
+        self.ontologies.append(ontology)
+        return super().classify(ontology)
+
+
+REPUTABLE = "https://example.org/research-commons/contracts/public/ReputableRequester"
+REQUESTER = "urn:uuid:f9f898ab-7501-4db7-a5f2-52d9968fbe6f"
+
+
+def test_receiver_assertions_reach_the_reasoner_and_the_report(repository_root):
+    reasoner = RecordingReasoner()
+    document = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    report = validator(repository_root, reasoner).validate(document, receiver_assertions=[(REPUTABLE, REQUESTER)])
+    assert report["status"] == "entailed"
+    axiom = f"ClassAssertion(<{REPUTABLE}> <{REQUESTER}>)"
+    assert all(axiom in ontology for ontology in reasoner.ontologies)
+    receiver_checks = [check for check in report["checks"] if check["kind"] == "receiver-assertions"]
+    assert receiver_checks and REPUTABLE in receiver_checks[0]["diagnostic"]
+
+
+def test_receiver_assertions_bypass_the_sender_allowlist_but_senders_cannot(repository_root):
+    document = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    manifest = ContractManifest.load(repository_root / "examples/contracts/public-research.contract.json")
+    assert REPUTABLE not in manifest.data["assertionPolicy"]["allowedClasses"]
+    assert validator(repository_root).validate(document, receiver_assertions=[(REPUTABLE, REQUESTER)])["status"] == "entailed"
+    document["semanticAssertions"] = [
+        {"assertionType": "ClassAssertion", "individual": REQUESTER, "class": REPUTABLE}
+    ]
+    assert validator(repository_root).validate(document)["status"] == "invalid"
+
+
+def test_receiver_assertions_are_rendered_through_the_checked_serializer(repository_root):
+    document = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    report = validator(repository_root).validate(
+        document, receiver_assertions=[("https://example.org/Reputable>) Ontology(", REQUESTER)]
+    )
+    assert report["status"] == "invalid"
+    assert any(check["kind"] == "semantic-assertions" for check in report["checks"])
+
+
+def test_receiver_assertions_apply_to_instance_and_joint_checks(repository_root):
+    reasoner = RecordingReasoner()
+    document = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    check_validator = validator(repository_root, reasoner)
+    check_validator.check_instance(
+        document,
+        "https://example.org/research-commons/contracts/public/AcceptedPublicTask",
+        receiver_assertions=[(REPUTABLE, REQUESTER)],
+    )
+    joint = check_validator.check_joint_consistency([document], receiver_assertions=[(REPUTABLE, REQUESTER)])
+    assert joint.status == "entailed"
+    axiom = f"ClassAssertion(<{REPUTABLE}> <{REQUESTER}>)"
+    assert all(axiom in ontology for ontology in reasoner.ontologies)

@@ -1,6 +1,7 @@
 import json
 import time
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -38,13 +39,43 @@ class Check:
         return value
 
 
+ReceiverAssertion = tuple[str, str]
+"""A (class IRI, individual IRI) pair asserted by the receiving node itself.
+
+Receiver assertions carry facts the receiver trusts from its own sources (a
+reputation ledger, an access-control list, a local registry). They bypass the
+sender allowlist because the sender never wrote them, but they are still
+rendered through the checked serializer and recorded in the report so a
+decision can be audited and repeated.
+"""
+
+
+def receiver_axioms(assertions: Iterable[ReceiverAssertion]) -> list[str]:
+    axioms = []
+    for class_iri, individual in assertions:
+        axioms.append(f"ClassAssertion({render_iri(class_iri)} {render_iri(individual)})")
+    return axioms
+
+
 class SemanticValidator:
     def __init__(self, manifest: ContractManifest, reasoner: Reasoner) -> None:
         self.manifest = manifest
         self.reasoner = reasoner
         self.base_ontology = manifest.ontology_paths()[0].read_text(encoding="utf-8")
 
-    def validate(self, document: dict[str, Any]) -> dict[str, Any]:
+    def _message_axioms(self, document: dict[str, Any], receiver_assertions: Iterable[ReceiverAssertion]) -> list[str]:
+        axioms = message_axioms(
+            document,
+            allowed_classes=set(self.manifest.data["assertionPolicy"]["allowedClasses"]),
+            allowed_object_properties=set(self.manifest.data["assertionPolicy"]["allowedObjectProperties"]),
+        )
+        axioms.extend(receiver_axioms(receiver_assertions))
+        return axioms
+
+    def validate(
+        self, document: dict[str, Any], *, receiver_assertions: Iterable[ReceiverAssertion] = ()
+    ) -> dict[str, Any]:
+        receiver_assertions = list(receiver_assertions)
         checks: list[Check] = []
         started = time.monotonic()
         try:
@@ -70,20 +101,20 @@ class SemanticValidator:
 
         projection_started = time.monotonic()
         try:
-            asserted = add_axioms(
-                self.base_ontology,
-                message_axioms(
-                    document,
-                    allowed_classes=set(self.manifest.data["assertionPolicy"]["allowedClasses"]),
-                    allowed_object_properties=set(
-                        self.manifest.data["assertionPolicy"]["allowedObjectProperties"]
-                    ),
-                ),
-            )
+            asserted = add_axioms(self.base_ontology, self._message_axioms(document, receiver_assertions))
         except FunctionalSyntaxError as error:
             checks.append(Check("semantic-assertions", "invalid", _elapsed(projection_started), str(error)))
             return self._report(document, "invalid", checks)
         checks.append(Check("semantic-assertions", "entailed", _elapsed(projection_started)))
+        if receiver_assertions:
+            checks.append(
+                Check(
+                    "receiver-assertions",
+                    "entailed",
+                    0,
+                    "; ".join(f"{individual} : {class_iri}" for class_iri, individual in receiver_assertions),
+                )
+            )
         consistency = self._consistency_check(asserted)
         checks.append(consistency)
         if consistency.status != "entailed":
@@ -153,26 +184,26 @@ class SemanticValidator:
             _elapsed(started),
         )
 
-    def check_instance(self, document: dict[str, Any], class_iri: str) -> dict[str, Any]:
-        report = self.validate(document)
+    def check_instance(
+        self,
+        document: dict[str, Any],
+        class_iri: str,
+        *,
+        receiver_assertions: Iterable[ReceiverAssertion] = (),
+    ) -> dict[str, Any]:
+        receiver_assertions = list(receiver_assertions)
+        report = self.validate(document, receiver_assertions=receiver_assertions)
         if report["status"] in {"invalid", "indeterminate"}:
             return report
-        asserted = add_axioms(
-            self.base_ontology,
-            message_axioms(
-                document,
-                allowed_classes=set(self.manifest.data["assertionPolicy"]["allowedClasses"]),
-                allowed_object_properties=set(
-                    self.manifest.data["assertionPolicy"]["allowedObjectProperties"]
-                ),
-            ),
-        )
+        asserted = add_axioms(self.base_ontology, self._message_axioms(document, receiver_assertions))
         check = self._instance_check(asserted, document["@id"], class_iri, "requested-instance-check")
         report["checks"].append(check.as_dict())
         report["status"] = check.status
         return report
 
-    def check_joint_consistency(self, documents: list[dict[str, Any]]) -> Check:
+    def check_joint_consistency(
+        self, documents: list[dict[str, Any]], *, receiver_assertions: Iterable[ReceiverAssertion] = ()
+    ) -> Check:
         started = time.monotonic()
         axioms: list[str] = []
         try:
@@ -182,17 +213,8 @@ class SemanticValidator:
                 shacl = validate_shacl(document)
                 if not shacl.conforms:
                     return Check("joint-consistency", "invalid", _elapsed(started), shacl.report)
-                axioms.extend(
-                    message_axioms(
-                        document,
-                        allowed_classes=set(
-                            self.manifest.data["assertionPolicy"]["allowedClasses"]
-                        ),
-                        allowed_object_properties=set(
-                            self.manifest.data["assertionPolicy"]["allowedObjectProperties"]
-                        ),
-                    )
-                )
+                axioms.extend(self._message_axioms(document, ()))
+            axioms.extend(receiver_axioms(receiver_assertions))
         except (StructuralValidationError, FunctionalSyntaxError, ValueError) as error:
             return Check("joint-consistency", "invalid", _elapsed(started), str(error))
         result = self._consistency_check(add_axioms(self.base_ontology, axioms))
