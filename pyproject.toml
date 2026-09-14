@@ -24,5 +24,8 @@ research-commons = "research_commons.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/research_commons"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"spec" = "research_commons/spec"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

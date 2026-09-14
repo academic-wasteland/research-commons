@@ -23,6 +23,18 @@ ontology. Its digest is the SHA-256 of its exact bytes. The bundle digest is the
 SHA-256 of the UTF-8 sequence `ontologyIRI`, a NUL byte, the prefixed file
 digest, and a newline. This removes network imports from the reasoning boundary.
 
+## Receiver assertions
+
+A receiving node may add its own ABox facts before reasoning, for example
+`ClassAssertion(ReputableRequester requester)` derived from a reputation
+ledger it trusts, or `ClassAssertion(RestrictedDataset dataset)` from its
+access-control list. Receiver assertions bypass the sender allowlist because
+the sender did not write them, but they are rendered through the checked
+serializer, limited to class assertions, and listed in the report under the
+`receiver-assertions` check so the decision can be audited and repeated.
+Receiver assertions are node policy (section 8.14 of the proposal); they are
+never transmitted with the message.
+
 ## What OWL does not validate
 
 OWL uses open-world semantics and does not assume differently named individuals

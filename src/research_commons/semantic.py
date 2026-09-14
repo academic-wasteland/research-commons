@@ -1,9 +1,11 @@
 import json
 import time
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from .axioms import check_axiom
 from .contracts import ContractManifest
 from .km import Reasoner, ReasonerError
 from .ofn import (
@@ -38,13 +40,83 @@ class Check:
         return value
 
 
+ReceiverAssertion = tuple[str, str] | str
+"""A (class IRI, individual IRI) pair asserted by the receiving node itself.
+
+Receiver assertions carry facts the receiver trusts from its own sources (a
+reputation ledger, an access-control list, a local registry). They bypass the
+sender allowlist because the sender never wrote them, but they are still
+rendered through the checked serializer and recorded in the report so a
+decision can be audited and repeated.
+
+A receiver assertion is either a (class IRI, individual IRI) pair or one
+complete axiom string built with `research_commons.axioms` (closures, scope
+axioms, negated facts about the receiver's own holdings). Axiom strings are
+re-checked by `axioms.check_axiom` before they reach the reasoner.
+"""
+
+Probe = tuple[str, str] | tuple[str, str, str]
+"""A (check kind, class IRI or class expression[, individual IRI]) instance check the receiver wants reported.
+
+Without an individual the probe asks about the message itself; with one it asks about another
+individual in the same asserted ontology (for example whether a presented credential is vetted).
+
+Probes run on the same asserted ontology as the decision checks and are listed
+in the report, but they never change the report status. Nodes use them to
+explain a decision (which credential covered a task, why a scope failed).
+"""
+
+
+def receiver_axioms(assertions: Iterable[ReceiverAssertion]) -> list[str]:
+    axioms = []
+    for assertion in assertions:
+        if isinstance(assertion, str):
+            axioms.append(check_axiom(assertion))
+            continue
+        class_iri, individual = assertion
+        axioms.append(f"ClassAssertion({render_iri(class_iri)} {render_iri(individual)})")
+    return axioms
+
+
+def _probe_axiom(individual: str, class_expression: str, *, negated: bool) -> str:
+    """Instance probe for a class IRI or a checked class expression (for example ObjectSomeValuesFrom(...))."""
+    if class_expression.startswith("Object") and class_expression.endswith(")"):
+        expression = f"ObjectComplementOf({class_expression})" if negated else class_expression
+        return check_axiom(f"ClassAssertion({expression} {render_iri(individual)})")
+    return instance_probe_axiom(individual, class_expression, negated=negated)
+
+
+def _describe(assertion: ReceiverAssertion) -> str:
+    if isinstance(assertion, str):
+        return assertion
+    class_iri, individual = assertion
+    return f"{individual} : {class_iri}"
+
+
 class SemanticValidator:
     def __init__(self, manifest: ContractManifest, reasoner: Reasoner) -> None:
         self.manifest = manifest
         self.reasoner = reasoner
         self.base_ontology = manifest.ontology_paths()[0].read_text(encoding="utf-8")
 
-    def validate(self, document: dict[str, Any]) -> dict[str, Any]:
+    def _message_axioms(self, document: dict[str, Any], receiver_assertions: Iterable[ReceiverAssertion]) -> list[str]:
+        axioms = message_axioms(
+            document,
+            allowed_classes=set(self.manifest.data["assertionPolicy"]["allowedClasses"]),
+            allowed_object_properties=set(self.manifest.data["assertionPolicy"]["allowedObjectProperties"]),
+        )
+        axioms.extend(receiver_axioms(receiver_assertions))
+        return axioms
+
+    def validate(
+        self,
+        document: dict[str, Any],
+        *,
+        receiver_assertions: Iterable[ReceiverAssertion] = (),
+        probes: Iterable[Probe] = (),
+    ) -> dict[str, Any]:
+        receiver_assertions = list(receiver_assertions)
+        probes = list(probes)
         checks: list[Check] = []
         started = time.monotonic()
         try:
@@ -70,20 +142,20 @@ class SemanticValidator:
 
         projection_started = time.monotonic()
         try:
-            asserted = add_axioms(
-                self.base_ontology,
-                message_axioms(
-                    document,
-                    allowed_classes=set(self.manifest.data["assertionPolicy"]["allowedClasses"]),
-                    allowed_object_properties=set(
-                        self.manifest.data["assertionPolicy"]["allowedObjectProperties"]
-                    ),
-                ),
-            )
+            asserted = add_axioms(self.base_ontology, self._message_axioms(document, receiver_assertions))
         except FunctionalSyntaxError as error:
             checks.append(Check("semantic-assertions", "invalid", _elapsed(projection_started), str(error)))
             return self._report(document, "invalid", checks)
         checks.append(Check("semantic-assertions", "entailed", _elapsed(projection_started)))
+        if receiver_assertions:
+            checks.append(
+                Check(
+                    "receiver-assertions",
+                    "entailed",
+                    0,
+                    "; ".join(_describe(assertion) for assertion in receiver_assertions),
+                )
+            )
         consistency = self._consistency_check(asserted)
         checks.append(consistency)
         if consistency.status != "entailed":
@@ -117,6 +189,9 @@ class SemanticValidator:
             status = output.status
         else:
             status = "entailed"
+        for probe in probes:
+            kind, class_iri, *individual = probe
+            checks.append(self._instance_check(asserted, individual[0] if individual else document["@id"], class_iri, kind))
         return self._report(document, status, checks)
 
     def check_composition(self, produced_class: str, accepted_class: str) -> Check:
@@ -153,26 +228,26 @@ class SemanticValidator:
             _elapsed(started),
         )
 
-    def check_instance(self, document: dict[str, Any], class_iri: str) -> dict[str, Any]:
-        report = self.validate(document)
+    def check_instance(
+        self,
+        document: dict[str, Any],
+        class_iri: str,
+        *,
+        receiver_assertions: Iterable[ReceiverAssertion] = (),
+    ) -> dict[str, Any]:
+        receiver_assertions = list(receiver_assertions)
+        report = self.validate(document, receiver_assertions=receiver_assertions)
         if report["status"] in {"invalid", "indeterminate"}:
             return report
-        asserted = add_axioms(
-            self.base_ontology,
-            message_axioms(
-                document,
-                allowed_classes=set(self.manifest.data["assertionPolicy"]["allowedClasses"]),
-                allowed_object_properties=set(
-                    self.manifest.data["assertionPolicy"]["allowedObjectProperties"]
-                ),
-            ),
-        )
+        asserted = add_axioms(self.base_ontology, self._message_axioms(document, receiver_assertions))
         check = self._instance_check(asserted, document["@id"], class_iri, "requested-instance-check")
         report["checks"].append(check.as_dict())
         report["status"] = check.status
         return report
 
-    def check_joint_consistency(self, documents: list[dict[str, Any]]) -> Check:
+    def check_joint_consistency(
+        self, documents: list[dict[str, Any]], *, receiver_assertions: Iterable[ReceiverAssertion] = ()
+    ) -> Check:
         started = time.monotonic()
         axioms: list[str] = []
         try:
@@ -182,17 +257,8 @@ class SemanticValidator:
                 shacl = validate_shacl(document)
                 if not shacl.conforms:
                     return Check("joint-consistency", "invalid", _elapsed(started), shacl.report)
-                axioms.extend(
-                    message_axioms(
-                        document,
-                        allowed_classes=set(
-                            self.manifest.data["assertionPolicy"]["allowedClasses"]
-                        ),
-                        allowed_object_properties=set(
-                            self.manifest.data["assertionPolicy"]["allowedObjectProperties"]
-                        ),
-                    )
-                )
+                axioms.extend(self._message_axioms(document, ()))
+            axioms.extend(receiver_axioms(receiver_assertions))
         except (StructuralValidationError, FunctionalSyntaxError, ValueError) as error:
             return Check("joint-consistency", "invalid", _elapsed(started), str(error))
         result = self._consistency_check(add_axioms(self.base_ontology, axioms))
@@ -246,14 +312,14 @@ class SemanticValidator:
         try:
             negative = add_axioms(
                 ontology,
-                [instance_probe_axiom(individual, class_iri, negated=True)],
+                [_probe_axiom(individual, class_iri, negated=True)],
             )
             negative_result = self.reasoner.classify(negative)
             if not negative_result.consistent:
                 return Check(kind, "entailed", _elapsed(started))
             positive = add_axioms(
                 ontology,
-                [instance_probe_axiom(individual, class_iri, negated=False)],
+                [_probe_axiom(individual, class_iri, negated=False)],
             )
             positive_result = self.reasoner.classify(positive)
             if not positive_result.consistent:
@@ -261,6 +327,8 @@ class SemanticValidator:
             return Check(kind, "unknown", _elapsed(started))
         except ReasonerError as error:
             return Check(kind, "indeterminate", _elapsed(started), str(error))
+        except FunctionalSyntaxError as error:
+            return Check(kind, "invalid", _elapsed(started), str(error))
 
     def _class_satisfiability_check(self, class_iri: str, kind: str) -> Check:
         probe = f"urn:uuid:{uuid.uuid4()}"
