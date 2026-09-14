@@ -1,0 +1,27 @@
+{
+  "@context": "https://w3id.org/research-commons/v0.1/context.jsonld",
+  "@id": "urn:uuid:9bde04d9-a500-4e75-83df-622cae85ad74",
+  "@type": "ResearchTask",
+  "semanticContract": "https://example.org/research-commons/contracts/public/0.1.0",
+  "ontologyProfile": "sha256:27679e07403596ce23b781af1255a7ab8fc5156f4ec29e9ba22fdfcc45391ec3",
+  "partOfRequest": "urn:uuid:49d52b58-d5ec-4f05-987f-ef41dd175aae",
+  "taskType": "https://example.org/research-commons/contracts/public/ProteinFunctionPredictionTask",
+  "requestedBy": {
+    "@id": "urn:uuid:f9f898ab-7501-4db7-a5f2-52d9968fbe6f",
+    "@type": "Agent"
+  },
+  "usesDataset": [
+    {
+      "@id": "https://www.ebi.ac.uk/metagenomics/proteins/MGYP000261684433",
+      "@type": "PublicDataset"
+    }
+  ],
+  "semanticAssertions": [
+    {
+      "assertionType": "ObjectPropertyAssertion",
+      "subject": "https://example.org/research-commons/contracts/public/principal",
+      "property": "https://w3id.org/research-commons/v0.1/delegatesTo",
+      "object": "urn:uuid:f9f898ab-7501-4db7-a5f2-52d9968fbe6f"
+    }
+  ]
+}

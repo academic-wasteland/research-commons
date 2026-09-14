@@ -1,0 +1,54 @@
+{
+  "id": "https://example.org/research-commons/contracts/public/0.1.0",
+  "version": "0.1.0",
+  "bundleDigest": "sha256:27679e07403596ce23b781af1255a7ab8fc5156f4ec29e9ba22fdfcc45391ec3",
+  "ontologies": [
+    {
+      "id": "https://example.org/research-commons/contracts/public/ontology",
+      "path": "public-research.ofn",
+      "digest": "sha256:5fcaa9a30234efbd76c4c009418f8e5449436bcd7cf4b9700ba3f539e4c90720"
+    }
+  ],
+  "acceptedTaskClass": "https://example.org/research-commons/contracts/public/AcceptedPublicTask",
+  "guaranteedOutputClass": "https://example.org/research-commons/contracts/public/ConformingContribution",
+  "rejectedTaskClass": "https://example.org/research-commons/contracts/public/RejectedRestrictedTask",
+  "permissionRequiredClass": "https://example.org/research-commons/contracts/public/PermissionRequiredTask",
+  "assertionPolicy": {
+    "allowedClasses": [
+      "https://w3id.org/research-commons/v0.1/ResearchRequest",
+      "https://w3id.org/research-commons/v0.1/ResearchTask",
+      "https://w3id.org/research-commons/v0.1/ResearchContribution",
+      "https://w3id.org/research-commons/v0.1/Claim",
+      "https://w3id.org/research-commons/v0.1/Evidence",
+      "https://w3id.org/research-commons/v0.1/Person",
+      "https://w3id.org/research-commons/v0.1/Organization",
+      "https://w3id.org/research-commons/v0.1/Agent",
+      "https://w3id.org/research-commons/v0.1/Dataset",
+      "https://w3id.org/research-commons/v0.1/PublicDataset",
+      "https://w3id.org/research-commons/v0.1/RestrictedDataset",
+      "https://w3id.org/research-commons/v0.1/ResearchArtifact",
+      "https://example.org/research-commons/contracts/public/ProteinFunctionPredictionTask"
+    ],
+    "allowedObjectProperties": [
+      "https://w3id.org/research-commons/v0.1/partOfRequest",
+      "https://w3id.org/research-commons/v0.1/requestedBy",
+      "https://w3id.org/research-commons/v0.1/onBehalfOf",
+      "https://w3id.org/research-commons/v0.1/producedBy",
+      "https://w3id.org/research-commons/v0.1/addresses",
+      "https://w3id.org/research-commons/v0.1/usesDataset",
+      "https://w3id.org/research-commons/v0.1/hasOutput",
+      "https://w3id.org/research-commons/v0.1/hasClaim",
+      "https://w3id.org/research-commons/v0.1/hasEvidence",
+      "https://w3id.org/research-commons/v0.1/supports",
+      "https://w3id.org/research-commons/v0.1/contradicts",
+      "https://w3id.org/research-commons/v0.1/replicates",
+      "https://w3id.org/research-commons/v0.1/critiques",
+      "https://w3id.org/research-commons/v0.1/delegatesTo"
+    ]
+  },
+  "limits": {
+    "timeoutSeconds": 30,
+    "maxMessageBytes": 1048576,
+    "maxIndividuals": 1000
+  }
+}

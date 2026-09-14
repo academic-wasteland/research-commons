@@ -1,0 +1,47 @@
+@prefix rcp: <https://w3id.org/research-commons/v0.1/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<https://w3id.org/research-commons/v0.1/ontology> a owl:Ontology .
+
+rcp:Message a owl:Class .
+rcp:ResearchRequest a owl:Class ; rdfs:subClassOf rcp:Message .
+rcp:ResearchTask a owl:Class ; rdfs:subClassOf rcp:Message .
+rcp:ResearchContribution a owl:Class ; rdfs:subClassOf rcp:Message .
+rcp:Claim a owl:Class .
+rcp:Evidence a owl:Class .
+rcp:Critique a owl:Class ; rdfs:subClassOf rcp:ResearchContribution .
+rcp:ReplicationRequest a owl:Class ; rdfs:subClassOf rcp:ResearchTask .
+rcp:ReplicationResult a owl:Class ; rdfs:subClassOf rcp:ResearchContribution .
+rcp:Actor a owl:Class .
+rcp:Person a owl:Class ; rdfs:subClassOf rcp:Actor .
+rcp:Organization a owl:Class ; rdfs:subClassOf rcp:Actor .
+rcp:Agent a owl:Class ; rdfs:subClassOf rcp:Actor .
+rcp:Dataset a owl:Class .
+rcp:PublicDataset a owl:Class ; rdfs:subClassOf rcp:Dataset .
+rcp:RestrictedDataset a owl:Class ; rdfs:subClassOf rcp:Dataset .
+rcp:ResearchArtifact a owl:Class .
+rcp:Capability a owl:Class .
+rcp:SemanticValidationReport a owl:Class .
+
+rcp:Message owl:disjointWith rcp:Actor .
+rcp:PublicDataset owl:disjointWith rcp:RestrictedDataset .
+
+rcp:partOfRequest a owl:ObjectProperty .
+rcp:requestedBy a owl:ObjectProperty .
+rcp:onBehalfOf a owl:ObjectProperty .
+rcp:producedBy a owl:ObjectProperty .
+rcp:addresses a owl:ObjectProperty .
+rcp:usesDataset a owl:ObjectProperty .
+rcp:hasOutput a owl:ObjectProperty .
+rcp:hasClaim a owl:ObjectProperty .
+rcp:hasEvidence a owl:ObjectProperty .
+rcp:supports a owl:ObjectProperty .
+rcp:contradicts a owl:ObjectProperty .
+rcp:replicates a owl:ObjectProperty .
+rcp:critiques a owl:ObjectProperty .
+rcp:delegatesTo a owl:ObjectProperty .
+rcp:authorizes a owl:ObjectProperty .
+rcp:effectiveAuthorization a owl:ObjectProperty ;
+  owl:propertyChainAxiom ( [ owl:inverseOf rcp:delegatesTo ] rcp:authorizes ) .

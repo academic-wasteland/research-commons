@@ -1,0 +1,27 @@
+{
+  "@context": "https://w3id.org/research-commons/v0.1/context.jsonld",
+  "@id": "urn:uuid:95672c72-eb04-401a-a076-d4cbda083159",
+  "@type": ["ResearchTask", "https://example.org/research-commons/contracts/public/ProteinFunctionPredictionTask"],
+  "semanticContract": "https://example.org/research-commons/contracts/public/0.1.0",
+  "ontologyProfile": "sha256:27679e07403596ce23b781af1255a7ab8fc5156f4ec29e9ba22fdfcc45391ec3",
+  "partOfRequest": "urn:uuid:49d52b58-d5ec-4f05-987f-ef41dd175aae",
+  "taskType": "https://example.org/research-commons/contracts/public/ProteinFunctionPredictionTask",
+  "requestedBy": {
+    "@id": "urn:uuid:f9f898ab-7501-4db7-a5f2-52d9968fbe6f",
+    "@type": "Agent",
+    "name": "Local orchestration agent"
+  },
+  "onBehalfOf": {
+    "@id": "https://orcid.org/0000-0001-8149-5890",
+    "@type": "Person",
+    "name": "Robert Hoehndorf"
+  },
+  "usesDataset": [
+    {
+      "@id": "https://www.ebi.ac.uk/metagenomics/proteins/MGYP000261684433",
+      "@type": "PublicDataset",
+      "name": "Public MGnify protein record",
+      "license": "https://www.ebi.ac.uk/about/terms-of-use"
+    }
+  ]
+}

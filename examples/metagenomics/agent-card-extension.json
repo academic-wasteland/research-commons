@@ -1,0 +1,11 @@
+{
+  "extension": "https://w3id.org/research-commons/v0.1/a2a",
+  "contracts": [
+    {
+      "manifest": "https://example.org/research-commons/contracts/public/0.1.0/manifest.json",
+      "bundleDigest": "sha256:27679e07403596ce23b781af1255a7ab8fc5156f4ec29e9ba22fdfcc45391ec3",
+      "acceptedTaskClass": "https://example.org/research-commons/contracts/public/AcceptedPublicTask",
+      "guaranteedOutputClass": "https://example.org/research-commons/contracts/public/ConformingContribution"
+    }
+  ]
+}

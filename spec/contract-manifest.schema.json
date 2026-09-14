@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/research-commons/v0.1/contract-manifest.schema.json",
+  "title": "SROIQ semantic contract manifest",
+  "type": "object",
+  "required": ["id", "version", "bundleDigest", "ontologies", "acceptedTaskClass", "guaranteedOutputClass", "rejectedTaskClass", "permissionRequiredClass", "assertionPolicy", "limits"],
+  "properties": {
+    "id": {"type": "string", "format": "uri"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "bundleDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "ontologies": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "path", "digest"],
+        "properties": {
+          "id": {"type": "string", "format": "uri"},
+          "path": {"type": "string", "pattern": "^[^/].*\\.ofn$"},
+          "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "acceptedTaskClass": {"type": "string", "format": "uri"},
+    "guaranteedOutputClass": {"type": "string", "format": "uri"},
+    "rejectedTaskClass": {"type": "string", "format": "uri"},
+    "permissionRequiredClass": {"type": "string", "format": "uri"},
+    "assertionPolicy": {
+      "type": "object",
+      "required": ["allowedClasses", "allowedObjectProperties"],
+      "properties": {
+        "allowedClasses": {"type": "array", "items": {"type": "string", "format": "uri"}, "uniqueItems": true},
+        "allowedObjectProperties": {"type": "array", "items": {"type": "string", "format": "uri"}, "uniqueItems": true}
+      },
+      "additionalProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "required": ["timeoutSeconds", "maxMessageBytes", "maxIndividuals"],
+      "properties": {
+        "timeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 300},
+        "maxMessageBytes": {"type": "integer", "minimum": 1024, "maximum": 10485760},
+        "maxIndividuals": {"type": "integer", "minimum": 1, "maximum": 10000}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,19 @@
+{
+  "@context": "https://w3id.org/research-commons/v0.1/context.jsonld",
+  "@id": "urn:uuid:5f0fd9d8-18bc-451b-a078-8294477c9769",
+  "@type": "ResearchTask",
+  "semanticContract": "https://example.org/research-commons/contracts/public/0.1.0",
+  "ontologyProfile": "sha256:27679e07403596ce23b781af1255a7ab8fc5156f4ec29e9ba22fdfcc45391ec3",
+  "partOfRequest": "urn:uuid:49d52b58-d5ec-4f05-987f-ef41dd175aae",
+  "taskType": "https://example.org/research-commons/contracts/public/ProteinFunctionPredictionTask",
+  "requestedBy": {
+    "@id": "urn:uuid:f9f898ab-7501-4db7-a5f2-52d9968fbe6f",
+    "@type": "Agent"
+  },
+  "usesDataset": [
+    {
+      "@id": "urn:uuid:a29e7aa9-6d61-4261-8168-0fa625645a09",
+      "@type": "RestrictedDataset"
+    }
+  ]
+}

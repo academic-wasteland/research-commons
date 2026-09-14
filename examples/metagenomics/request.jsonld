@@ -1,0 +1,13 @@
+{
+  "@context": "https://w3id.org/research-commons/v0.1/context.jsonld",
+  "@id": "urn:uuid:49d52b58-d5ec-4f05-987f-ef41dd175aae",
+  "@type": "ResearchRequest",
+  "semanticContract": "https://example.org/research-commons/contracts/public/0.1.0",
+  "ontologyProfile": "sha256:27679e07403596ce23b781af1255a7ab8fc5156f4ec29e9ba22fdfcc45391ec3",
+  "question": "Which molecular function is supported for the selected public MGnify protein?",
+  "requestedBy": {
+    "@id": "https://orcid.org/0000-0001-8149-5890",
+    "@type": "Person",
+    "name": "Robert Hoehndorf"
+  }
+}

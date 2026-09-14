@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/research-commons/v0.1/message.schema.json",
+  "title": "Research Commons message",
+  "oneOf": [
+    {"$ref": "#/$defs/researchRequest"},
+    {"$ref": "#/$defs/researchTask"},
+    {"$ref": "#/$defs/researchContribution"}
+  ],
+  "$defs": {
+    "iri": {"type": "string", "format": "uri"},
+    "types": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1, "uniqueItems": true}
+      ]
+    },
+    "requestTypes": {
+      "oneOf": [
+        {"const": "ResearchRequest"},
+        {"type": "array", "contains": {"const": "ResearchRequest"}, "minItems": 1, "uniqueItems": true}
+      ]
+    },
+    "taskTypes": {
+      "oneOf": [
+        {"const": "ResearchTask"},
+        {"type": "array", "contains": {"const": "ResearchTask"}, "minItems": 1, "uniqueItems": true}
+      ]
+    },
+    "contributionTypes": {
+      "oneOf": [
+        {"const": "ResearchContribution"},
+        {"type": "array", "contains": {"const": "ResearchContribution"}, "minItems": 1, "uniqueItems": true}
+      ]
+    },
+    "entityRef": {
+      "type": "object",
+      "required": ["@id", "@type"],
+      "properties": {
+        "@id": {"$ref": "#/$defs/iri"},
+        "@type": {"$ref": "#/$defs/types"},
+        "name": {"type": "string", "minLength": 1},
+        "license": {"$ref": "#/$defs/iri"},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "semanticAssertion": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["assertionType", "individual", "class"],
+          "properties": {
+            "assertionType": {"const": "ClassAssertion"},
+            "individual": {"$ref": "#/$defs/iri"},
+            "class": {"$ref": "#/$defs/iri"}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["assertionType", "subject", "property", "object"],
+          "properties": {
+            "assertionType": {"const": "ObjectPropertyAssertion"},
+            "subject": {"$ref": "#/$defs/iri"},
+            "property": {"$ref": "#/$defs/iri"},
+            "object": {"$ref": "#/$defs/iri"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "base": {
+      "type": "object",
+      "required": ["@context", "@id", "@type", "semanticContract", "ontologyProfile"],
+      "properties": {
+        "@context": {"const": "https://w3id.org/research-commons/v0.1/context.jsonld"},
+        "@id": {"$ref": "#/$defs/iri"},
+        "@type": {"$ref": "#/$defs/types"},
+        "semanticContract": {"$ref": "#/$defs/iri"},
+        "ontologyProfile": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "researchRequest": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": ["question", "requestedBy"],
+          "properties": {
+            "@context": true,
+            "@id": true,
+            "@type": {"$ref": "#/$defs/requestTypes"},
+            "semanticContract": true,
+            "ontologyProfile": true,
+            "question": {"type": "string", "minLength": 1},
+            "requestedBy": {"$ref": "#/$defs/entityRef"},
+            "semanticAssertions": {"type": "array", "items": {"$ref": "#/$defs/semanticAssertion"}, "uniqueItems": true}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "researchTask": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": ["partOfRequest", "taskType", "requestedBy", "usesDataset"],
+          "properties": {
+            "@context": true,
+            "@id": true,
+            "@type": {"$ref": "#/$defs/taskTypes"},
+            "semanticContract": true,
+            "ontologyProfile": true,
+            "partOfRequest": {"$ref": "#/$defs/iri"},
+            "taskType": {"$ref": "#/$defs/iri"},
+            "requestedBy": {"$ref": "#/$defs/entityRef"},
+            "onBehalfOf": {"$ref": "#/$defs/entityRef"},
+            "usesDataset": {"type": "array", "items": {"$ref": "#/$defs/entityRef"}, "minItems": 1, "uniqueItems": true},
+            "semanticAssertions": {"type": "array", "items": {"$ref": "#/$defs/semanticAssertion"}, "uniqueItems": true}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "claimObject": {
+      "anyOf": [
+        {"$ref": "#/$defs/iri"},
+        {"type": "string", "minLength": 1},
+        {"type": "number"},
+        {"type": "boolean"}
+      ]
+    },
+    "claim": {
+      "type": "object",
+      "required": ["@id", "@type", "statement", "subject", "predicate", "object", "hasEvidence"],
+      "properties": {
+        "@id": {"$ref": "#/$defs/iri"},
+        "@type": {"const": "Claim"},
+        "statement": {"type": "string", "minLength": 1},
+        "subject": {"$ref": "#/$defs/iri"},
+        "predicate": {"$ref": "#/$defs/iri"},
+        "object": {"$ref": "#/$defs/claimObject"},
+        "hasEvidence": {"type": "array", "items": {"$ref": "#/$defs/iri"}, "minItems": 1, "uniqueItems": true},
+        "supports": {"type": "array", "items": {"$ref": "#/$defs/iri"}, "uniqueItems": true},
+        "contradicts": {"type": "array", "items": {"$ref": "#/$defs/iri"}, "uniqueItems": true}
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["@id", "@type", "digest", "license"],
+      "properties": {
+        "@id": {"$ref": "#/$defs/iri"},
+        "@type": {"const": "Evidence"},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "license": {"$ref": "#/$defs/iri"},
+        "name": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "researchContribution": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": ["addresses", "producedBy", "generatedAtTime", "hasOutput", "hasClaim", "hasEvidence"],
+          "properties": {
+            "@context": true,
+            "@id": true,
+            "@type": {"$ref": "#/$defs/contributionTypes"},
+            "semanticContract": true,
+            "ontologyProfile": true,
+            "addresses": {"$ref": "#/$defs/iri"},
+            "producedBy": {"$ref": "#/$defs/entityRef"},
+            "generatedAtTime": {"type": "string", "format": "date-time"},
+            "hasOutput": {"type": "array", "items": {"$ref": "#/$defs/entityRef"}, "minItems": 1, "uniqueItems": true},
+            "hasClaim": {"type": "array", "items": {"$ref": "#/$defs/claim"}, "minItems": 1, "uniqueItems": true},
+            "hasEvidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}, "minItems": 1, "uniqueItems": true},
+            "semanticAssertions": {"type": "array", "items": {"$ref": "#/$defs/semanticAssertion"}, "uniqueItems": true}
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

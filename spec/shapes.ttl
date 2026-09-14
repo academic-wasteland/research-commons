@@ -1,0 +1,25 @@
+@prefix rcp: <https://w3id.org/research-commons/v0.1/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+rcp:ResearchTaskShape a sh:NodeShape ;
+  sh:targetClass rcp:ResearchTask ;
+  sh:property [ sh:path rcp:partOfRequest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path rcp:requestedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path rcp:semanticContract ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path rcp:ontologyProfile ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] .
+
+rcp:ResearchContributionShape a sh:NodeShape ;
+  sh:targetClass rcp:ResearchContribution ;
+  sh:property [ sh:path rcp:addresses ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path rcp:producedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path rcp:hasOutput ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path rcp:semanticContract ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path rcp:ontologyProfile ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] .
+
+rcp:ClaimShape a sh:NodeShape ;
+  sh:targetClass rcp:Claim ;
+  sh:property [ sh:path rcp:statement ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path rcp:subject ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path rcp:predicate ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path rcp:object ; sh:minCount 1 ; sh:maxCount 1 ] .

@@ -1,0 +1,43 @@
+{
+  "@context": "https://w3id.org/research-commons/v0.1/context.jsonld",
+  "@id": "urn:uuid:757d2882-b533-4fc2-9bd1-8c6b21227284",
+  "@type": "ResearchContribution",
+  "semanticContract": "https://example.org/research-commons/contracts/public/0.1.0",
+  "ontologyProfile": "sha256:27679e07403596ce23b781af1255a7ab8fc5156f4ec29e9ba22fdfcc45391ec3",
+  "addresses": "urn:uuid:95672c72-eb04-401a-a076-d4cbda083159",
+  "producedBy": {
+    "@id": "urn:uuid:73cab5b4-a3a7-4d85-a635-115584b145d3",
+    "@type": "Agent",
+    "name": "Example protein-function agent"
+  },
+  "generatedAtTime": "2026-09-05T12:00:00Z",
+  "hasOutput": [
+    {
+      "@id": "urn:uuid:79cd8c1a-3657-4f71-a3da-2b9c76db61ec",
+      "@type": "ResearchArtifact",
+      "name": "Function-prediction result",
+      "license": "https://creativecommons.org/licenses/by/4.0/",
+      "digest": "sha256:311e55da9f39fbbc5b8f2b72bedcddf0ee19435adf445d5017df6c24c7ffdc5a"
+    }
+  ],
+  "hasClaim": [
+    {
+      "@id": "urn:uuid:6473d8ca-a1c2-4107-91bc-10a145f29117",
+      "@type": "Claim",
+      "statement": "The example protein has a predicted molecular function.",
+      "subject": "https://www.ebi.ac.uk/metagenomics/proteins/MGYP000261684433",
+      "predicate": "http://purl.obolibrary.org/obo/RO_0000085",
+      "object": "http://purl.obolibrary.org/obo/GO_0003674",
+      "hasEvidence": ["urn:uuid:c67de5be-d0ab-497e-b2a7-09347bccdef8"]
+    }
+  ],
+  "hasEvidence": [
+    {
+      "@id": "urn:uuid:c67de5be-d0ab-497e-b2a7-09347bccdef8",
+      "@type": "Evidence",
+      "name": "Frozen demonstration evidence",
+      "digest": "sha256:7f8f8467e31a3b65f6c20d4be4d17d1069a208e938d0b858815bf26758585f7a",
+      "license": "https://creativecommons.org/licenses/by/4.0/"
+    }
+  ]
+}

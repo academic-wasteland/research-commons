@@ -1,0 +1,26 @@
+{
+  "@context": "https://w3id.org/research-commons/v0.1/context.jsonld",
+  "@id": "urn:uuid:6a117d37-385e-448f-89ea-42177c84aa45",
+  "@type": "ResearchTask",
+  "semanticContract": "https://example.org/research-commons/contracts/public/0.1.0",
+  "ontologyProfile": "sha256:27679e07403596ce23b781af1255a7ab8fc5156f4ec29e9ba22fdfcc45391ec3",
+  "partOfRequest": "urn:uuid:49d52b58-d5ec-4f05-987f-ef41dd175aae",
+  "taskType": "https://example.org/research-commons/contracts/public/ProteinFunctionPredictionTask",
+  "requestedBy": {
+    "@id": "urn:uuid:7719b31e-ff85-4094-aefd-0b7d2eb6e70d",
+    "@type": "Agent"
+  },
+  "usesDataset": [
+    {
+      "@id": "https://example.org/datasets/independent-public-control",
+      "@type": "PublicDataset"
+    }
+  ],
+  "semanticAssertions": [
+    {
+      "assertionType": "ClassAssertion",
+      "individual": "https://www.ebi.ac.uk/metagenomics/proteins/MGYP000261684433",
+      "class": "https://w3id.org/research-commons/v0.1/RestrictedDataset"
+    }
+  ]
+}
