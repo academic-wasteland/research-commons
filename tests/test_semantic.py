@@ -270,3 +270,13 @@ def test_probes_accept_checked_class_expressions(repository_root):
     assert any(f"ClassAssertion(ObjectComplementOf({expression}) <{document['@id']}>)" in ontology for ontology in reasoner.ontologies)
     hostile = validator(repository_root).validate(document, probes=[("bad", "ObjectOneOf(<https://e.org/a>)) Import(<https://e.org/x>")])
     assert hostile["checks"][-1]["status"] == "invalid" and hostile["status"] == "entailed"
+
+
+def test_probes_may_target_another_individual(repository_root):
+    reasoner = RecordingReasoner()
+    document = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    report = validator(repository_root, reasoner).validate(
+        document, receiver_assertions=[(REPUTABLE, CREDENTIAL)], probes=[("vetted:c1", REPUTABLE, CREDENTIAL)]
+    )
+    assert report["checks"][-1]["kind"] == "vetted:c1"
+    assert any(f"ClassAssertion(ObjectComplementOf(<{REPUTABLE}>) <{CREDENTIAL}>)" in ontology for ontology in reasoner.ontologies)

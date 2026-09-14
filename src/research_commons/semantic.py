@@ -55,8 +55,11 @@ axioms, negated facts about the receiver's own holdings). Axiom strings are
 re-checked by `axioms.check_axiom` before they reach the reasoner.
 """
 
-Probe = tuple[str, str]
-"""A (check kind, class IRI or class expression) instance check the receiver wants reported.
+Probe = tuple[str, str] | tuple[str, str, str]
+"""A (check kind, class IRI or class expression[, individual IRI]) instance check the receiver wants reported.
+
+Without an individual the probe asks about the message itself; with one it asks about another
+individual in the same asserted ontology (for example whether a presented credential is vetted).
 
 Probes run on the same asserted ontology as the decision checks and are listed
 in the report, but they never change the report status. Nodes use them to
@@ -186,8 +189,9 @@ class SemanticValidator:
             status = output.status
         else:
             status = "entailed"
-        for kind, class_iri in probes:
-            checks.append(self._instance_check(asserted, document["@id"], class_iri, kind))
+        for probe in probes:
+            kind, class_iri, *individual = probe
+            checks.append(self._instance_check(asserted, individual[0] if individual else document["@id"], class_iri, kind))
         return self._report(document, status, checks)
 
     def check_composition(self, produced_class: str, accepted_class: str) -> Check:
