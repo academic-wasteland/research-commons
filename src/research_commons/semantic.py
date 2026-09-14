@@ -56,7 +56,7 @@ re-checked by `axioms.check_axiom` before they reach the reasoner.
 """
 
 Probe = tuple[str, str]
-"""A (check kind, class IRI) instance check the receiver wants reported.
+"""A (check kind, class IRI or class expression) instance check the receiver wants reported.
 
 Probes run on the same asserted ontology as the decision checks and are listed
 in the report, but they never change the report status. Nodes use them to
@@ -73,6 +73,14 @@ def receiver_axioms(assertions: Iterable[ReceiverAssertion]) -> list[str]:
         class_iri, individual = assertion
         axioms.append(f"ClassAssertion({render_iri(class_iri)} {render_iri(individual)})")
     return axioms
+
+
+def _probe_axiom(individual: str, class_expression: str, *, negated: bool) -> str:
+    """Instance probe for a class IRI or a checked class expression (for example ObjectSomeValuesFrom(...))."""
+    if class_expression.startswith("Object") and class_expression.endswith(")"):
+        expression = f"ObjectComplementOf({class_expression})" if negated else class_expression
+        return check_axiom(f"ClassAssertion({expression} {render_iri(individual)})")
+    return instance_probe_axiom(individual, class_expression, negated=negated)
 
 
 def _describe(assertion: ReceiverAssertion) -> str:
@@ -300,14 +308,14 @@ class SemanticValidator:
         try:
             negative = add_axioms(
                 ontology,
-                [instance_probe_axiom(individual, class_iri, negated=True)],
+                [_probe_axiom(individual, class_iri, negated=True)],
             )
             negative_result = self.reasoner.classify(negative)
             if not negative_result.consistent:
                 return Check(kind, "entailed", _elapsed(started))
             positive = add_axioms(
                 ontology,
-                [instance_probe_axiom(individual, class_iri, negated=False)],
+                [_probe_axiom(individual, class_iri, negated=False)],
             )
             positive_result = self.reasoner.classify(positive)
             if not positive_result.consistent:
@@ -315,6 +323,8 @@ class SemanticValidator:
             return Check(kind, "unknown", _elapsed(started))
         except ReasonerError as error:
             return Check(kind, "indeterminate", _elapsed(started), str(error))
+        except FunctionalSyntaxError as error:
+            return Check(kind, "invalid", _elapsed(started), str(error))
 
     def _class_satisfiability_check(self, class_iri: str, kind: str) -> Check:
         probe = f"urn:uuid:{uuid.uuid4()}"

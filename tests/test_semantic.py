@@ -257,3 +257,16 @@ def test_probes_are_reported_without_changing_the_status(repository_root):
     from research_commons.schema import validate_against
 
     validate_against(probed, "semantic-validation-report.schema.json")
+
+
+def test_probes_accept_checked_class_expressions(repository_root):
+    from research_commons import axioms
+
+    reasoner = RecordingReasoner()
+    document = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    expression = axioms.some(COVERED_BY, axioms.one_of(CREDENTIAL))
+    report = validator(repository_root, reasoner).validate(document, probes=[("covers:c1", expression)])
+    assert report["checks"][-1]["kind"] == "covers:c1"
+    assert any(f"ClassAssertion(ObjectComplementOf({expression}) <{document['@id']}>)" in ontology for ontology in reasoner.ontologies)
+    hostile = validator(repository_root).validate(document, probes=[("bad", "ObjectOneOf(<https://e.org/a>)) Import(<https://e.org/x>")])
+    assert hostile["checks"][-1]["status"] == "invalid" and hostile["status"] == "entailed"
