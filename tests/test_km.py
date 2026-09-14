@@ -47,3 +47,21 @@ def test_runner_kills_timed_out_process_group(tmp_path):
     executable.chmod(0o755)
     with pytest.raises(ReasonerError, match="timeout"):
         KMRunner(str(executable), timeout_seconds=0.05).classify("Ontology(<urn:test>\n)\n")
+
+
+def test_km_pair_subsumptions_and_prefixes_are_normalised():
+    from research_commons.km import _classification_from_json, ontology_prefixes
+
+    ontology = "Prefix(:=<https://w3id.org/research-commons/v0.1/>)\nPrefix(pg:=<https://example.org/pg/>)\nOntology(<x>\n)"
+    prefixes = ontology_prefixes(ontology)
+    assert prefixes == {"": "https://w3id.org/research-commons/v0.1/", "pg": "https://example.org/pg/"}
+    result = _classification_from_json(
+        {"consistent": True, "subsumptions": [["pg:Basic", ":ResearchTask"], ["pg:Basic", "owl:Nothing"]],
+         "unsatisfiable": ["pg:Basic", "urn:uuid:1"], "dropped": 0},
+        5,
+        prefixes=prefixes,
+    )
+    supers = result.subsumptions["https://example.org/pg/Basic"]
+    assert "https://w3id.org/research-commons/v0.1/ResearchTask" in supers and "owl:Nothing" in supers
+    assert result.subsumptions["pg:Basic"] == supers
+    assert {"https://example.org/pg/Basic", "urn:uuid:1"} <= result.unsatisfiable
