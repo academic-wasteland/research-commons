@@ -5,9 +5,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from .axioms import check_axiom
 from .contracts import ContractManifest
 from .km import Reasoner, ReasonerError
-from .axioms import check_axiom
 from .ofn import (
     FunctionalSyntaxError,
     add_axioms,
