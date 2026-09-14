@@ -152,4 +152,4 @@ can be reversed by a new ADR; that is what they are for.
 
 ## License
 
-Code: Apache-2.0 (see `LICENSE`). Proposal text: CC BY 4.0.
+Code: Apache-2.0 (see `LICENSE`). Proposal text: CC0 or CC BY, still to be chosen (proposal header).
