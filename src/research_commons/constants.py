@@ -2,7 +2,9 @@ from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 REPOSITORY_ROOT = PACKAGE_ROOT.parents[1]
-SPEC_ROOT = REPOSITORY_ROOT / "spec"
+# A source checkout keeps the normative files in <repo>/spec; an installed wheel
+# carries a copy inside the package so validation works without the checkout.
+SPEC_ROOT = REPOSITORY_ROOT / "spec" if (REPOSITORY_ROOT / "spec").is_dir() else PACKAGE_ROOT / "spec"
 
 RCP = "https://w3id.org/research-commons/v0.1/"
 CONTEXT_IRI = f"{RCP}context.jsonld"
