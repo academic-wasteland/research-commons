@@ -1,0 +1,2 @@
+description = "Check that research-commons, bd, km, and dolt are available to RCP workers"
+warmup = true

@@ -3,6 +3,7 @@ import json
 import sys
 from pathlib import Path
 
+from . import beads, wasteland
 from .contracts import ContractManifest
 from .km import KMRunner
 from .rdf_validation import validate_shacl
@@ -53,6 +54,37 @@ def parser() -> argparse.ArgumentParser:
 
     classify = commands.add_parser("classify-protocol")
     _reasoner_arguments(classify)
+
+    to_bead = commands.add_parser("to-bead", help="Project RCP messages onto Beads `bd import` JSONL")
+    to_bead.add_argument("documents", type=Path, nargs="+")
+    to_bead.add_argument("--prefix", default=beads.DEFAULT_PREFIX)
+    to_bead.add_argument("--priority", type=int, default=2)
+
+    from_bead = commands.add_parser("from-bead", help="Recover RCP messages from a `bd export` JSONL file")
+    from_bead.add_argument("jsonl", type=Path)
+
+    to_wanted = commands.add_parser("to-wanted", help="Render a ResearchTask as a Wasteland `wanted` row")
+    to_wanted.add_argument("document", type=Path)
+    to_wanted.add_argument("--posted-by", required=True, help="Wasteland rig handle of the poster")
+    to_wanted.add_argument("--project", default=wasteland.DEFAULT_PROJECT)
+    to_wanted.add_argument("--priority", type=int, default=2)
+    to_wanted.add_argument("--sql", action="store_true", help="Emit an INSERT statement instead of JSON")
+
+    to_completion = commands.add_parser(
+        "to-completion", help="Render a ResearchContribution as a Wasteland `completions` row"
+    )
+    to_completion.add_argument("document", type=Path)
+    to_completion.add_argument("--completed-by", required=True, help="Wasteland rig handle of the contributor")
+    to_completion.add_argument("--hop-uri")
+    to_completion.add_argument("--sql", action="store_true")
+
+    to_stamp = commands.add_parser("to-stamp", help="Render a semantic validation report as a Wasteland stamp")
+    to_stamp.add_argument("report", type=Path)
+    to_stamp.add_argument("--author", required=True, help="Validating rig handle")
+    to_stamp.add_argument("--subject", required=True, help="Contributing rig handle being stamped")
+    to_stamp.add_argument("--completion", required=True, help="Wasteland completion id being stamped")
+    to_stamp.add_argument("--hop-uri")
+    to_stamp.add_argument("--sql", action="store_true")
     return root
 
 
@@ -70,6 +102,8 @@ def main(argv: list[str] | None = None) -> int:
             result = validate_shacl(document)
             _print({"status": "entailed" if result.conforms else "invalid", "report": result.report})
             return 0 if result.conforms else 1
+        if arguments.command in _LEDGER_COMMANDS:
+            return _ledger(arguments)
 
         manifest = ContractManifest.load(arguments.manifest)
         runner = KMRunner(
@@ -100,9 +134,62 @@ def main(argv: list[str] | None = None) -> int:
             }
         _print(report)
         return 0 if report["status"] == "entailed" else 1
-    except (OSError, ValueError, StructuralValidationError) as error:
+    except (OSError, TypeError, ValueError, StructuralValidationError) as error:
         _print({"status": "invalid", "diagnostic": str(error)})
         return 2
+
+
+_LEDGER_COMMANDS = {"to-bead", "from-bead", "to-wanted", "to-completion", "to-stamp"}
+
+
+def _ledger(arguments: argparse.Namespace) -> int:
+    if arguments.command == "to-bead":
+        records = [
+            beads.to_bead(load_json(path), prefix=arguments.prefix, priority=arguments.priority)
+            for path in arguments.documents
+        ]
+        sys.stdout.write(beads.to_jsonl(records))
+        return 0
+    if arguments.command == "from-bead":
+        documents = []
+        with arguments.jsonl.open(encoding="utf-8") as stream:
+            for line in stream:
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                if isinstance(record, dict) and record.get("source_system") == beads.SOURCE_SYSTEM:
+                    documents.append(beads.from_bead(record))
+        _print(documents)
+        return 0
+    if arguments.command == "to-wanted":
+        row = wasteland.task_to_wanted(
+            load_json(arguments.document),
+            posted_by=arguments.posted_by,
+            project=arguments.project,
+            priority=arguments.priority,
+        )
+        return _emit_row("wanted", row, arguments.sql)
+    if arguments.command == "to-completion":
+        row = wasteland.contribution_to_completion(
+            load_json(arguments.document), completed_by=arguments.completed_by, hop_uri=arguments.hop_uri
+        )
+        return _emit_row("completions", row, arguments.sql)
+    row = wasteland.report_to_stamp(
+        load_json(arguments.report),
+        author=arguments.author,
+        subject=arguments.subject,
+        completion=arguments.completion,
+        hop_uri=arguments.hop_uri,
+    )
+    return _emit_row("stamps", row, arguments.sql)
+
+
+def _emit_row(table: str, row: dict[str, object], as_sql: bool) -> int:
+    if as_sql:
+        sys.stdout.write(wasteland.insert_sql(table, row) + "\n")
+    else:
+        _print(row)
+    return 0
 
 
 def _reasoner_arguments(command: argparse.ArgumentParser) -> None:

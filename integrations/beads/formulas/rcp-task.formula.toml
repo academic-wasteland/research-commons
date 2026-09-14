@@ -1,0 +1,117 @@
+# Beads formula: execute one Research Commons Protocol task under a semantic contract.
+#
+# Cook and pour:
+#   bd cook integrations/beads/formulas/rcp-task.formula.toml
+#   bd mol pour rcp-task --var task_bead=rcp-531b713f --var manifest=examples/contracts/public-research.contract.json
+#
+# Steps are ordered so that no execution happens before the semantic gate is
+# `entailed`, and no publication happens before an independent validation stamp.
+
+formula = "rcp-task"
+description = """
+Run one RCP ResearchTask carried by a bead (metadata.rcp.document) through the
+RCP conformance pipeline: structure, SHACL, semantic gate, execution, contribution
+packaging, independent validation, and publication to the commons.
+"""
+type = "workflow"
+version = 1
+
+[vars.task_bead]
+description = "Bead id produced by `research-commons to-bead` for the ResearchTask"
+required = true
+
+[vars.manifest]
+description = "Path to the locally trusted, digest-verified contract manifest"
+required = true
+
+[vars.km_bin]
+description = "Path to the Kobayashi-MaRust binary"
+default = "km"
+
+[vars.commons_handle]
+description = "Wasteland rig handle that publishes the completion (empty = skip publication)"
+default = ""
+
+[[steps]]
+id = "recover-task"
+title = "Recover the RCP task from the bead"
+description = """
+```bash
+bd export --id {{task_bead}} > task-bead.jsonl
+research-commons from-bead task-bead.jsonl > task.jsonld
+```
+Abort if `from-bead` reports a digest or external_ref mismatch; the bead was tampered with.
+"""
+
+[[steps]]
+id = "validate-shape"
+title = "Structural and SHACL validation"
+needs = ["recover-task"]
+description = """
+```bash
+research-commons validate-structure task.jsonld
+research-commons validate-shacl task.jsonld
+```
+Both must return `entailed`. Anything else: close this molecule with a rejection note.
+"""
+
+[[steps]]
+id = "semantic-gate"
+title = "Semantic gate: accepted-task class must be entailed"
+needs = ["validate-shape"]
+description = """
+```bash
+research-commons validate-semantics task.jsonld --manifest {{manifest}} --km-bin {{km_bin}} > report.json
+```
+Proceed only when `status` is `entailed`. `unknown` means request clarification;
+`invalid`, `contradicted`, and `indeterminate` mean reject. Open-world absence is never permission.
+"""
+
+[[steps]]
+id = "execute"
+title = "Execute the task with the local analysis tooling"
+needs = ["semantic-gate"]
+description = """
+Run the analysis the task class asks for. Record every input dataset IRI, tool
+version, and output digest; they become `hasEvidence` and `hasOutput` entries.
+"""
+
+[[steps]]
+id = "package-contribution"
+title = "Package a ResearchContribution"
+needs = ["execute"]
+description = """
+Write `contribution.jsonld` addressing the task IRI, then:
+```bash
+research-commons validate-structure contribution.jsonld
+research-commons check-contribution contribution.jsonld --manifest {{manifest}} --km-bin {{km_bin}}
+research-commons to-bead contribution.jsonld | bd import -
+```
+"""
+
+[[steps]]
+id = "independent-validation"
+title = "Independent validation by another rig"
+needs = ["package-contribution"]
+description = """
+A different rig re-runs `check-contribution` on the exact contribution bytes and
+the same manifest digest, then stamps the completion. Self-stamps are rejected by
+the Wasteland schema.
+"""
+
+[steps.gate]
+type = "human"
+
+[[steps]]
+id = "publish"
+title = "Publish completion and stamp to the commons"
+needs = ["independent-validation"]
+description = """
+Skip when `commons_handle` is empty. Otherwise:
+```bash
+research-commons to-completion contribution.jsonld --completed-by {{commons_handle}} --sql | dolt sql
+research-commons to-stamp report.json --author <validator-handle> --subject {{commons_handle}} \
+  --completion <completion-id> --sql | dolt sql
+dolt commit -am "rcp: completion for {{task_bead}}" && dolt push origin main
+```
+"""

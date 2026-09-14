@@ -1,0 +1,61 @@
+# Gas City formula: same stages as integrations/beads/formulas/rcp-task.formula.toml,
+# with the semantic gate enforced by an exec check instead of agent discipline.
+
+formula = "rcp-task"
+description = "Validate, execute, package, and publish one RCP ResearchTask carried by a bead."
+version = 1
+
+[vars.task_bead]
+description = "Bead id produced by `research-commons to-bead`"
+required = true
+
+[vars.manifest]
+description = "Locally trusted contract manifest path"
+required = true
+
+[[steps]]
+id = "gate"
+title = "Semantic gate for {{task_bead}}"
+description = """
+Recover the task from bead `{{task_bead}}` into `rcp/task.jsonld` and run the
+RCP pipeline against `{{manifest}}`. Write the semantic report to `rcp/report.json`.
+The step only closes when the check script confirms `entailed`.
+"""
+
+[steps.check]
+max_attempts = 2
+
+[steps.check.check]
+mode = "exec"
+path = "scripts/rcp-gate-check.sh"
+timeout = "5m"
+
+[[steps]]
+id = "execute"
+title = "Execute the task"
+needs = ["gate"]
+description = "Run the analysis; record dataset IRIs, tool versions, output digests."
+
+[[steps]]
+id = "package"
+title = "Package and register the contribution"
+needs = ["execute"]
+description = """
+Write `rcp/contribution.jsonld`, then
+`research-commons check-contribution rcp/contribution.jsonld --manifest {{manifest}}`
+and `research-commons to-bead rcp/contribution.jsonld | bd import -`.
+"""
+
+[steps.check]
+max_attempts = 2
+
+[steps.check.check]
+mode = "exec"
+path = "scripts/rcp-contribution-check.sh"
+timeout = "5m"
+
+[[steps]]
+id = "publish"
+title = "Publish to the commons"
+needs = ["package"]
+description = "Run `gc rcp publish` (operator-provided) or leave for the human publisher."

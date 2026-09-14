@@ -1,0 +1,17 @@
+{
+  "status": "entailed",
+  "message": "urn:uuid:757d2882-b533-4fc2-9bd1-8c6b21227284",
+  "contract": "https://example.org/research-commons/contracts/public/0.1.0",
+  "bundleDigest": "sha256:27679e07403596ce23b781af1255a7ab8fc5156f4ec29e9ba22fdfcc45391ec3",
+  "checker": {
+    "name": "kobayashi-marust",
+    "version": "0.0.0"
+  },
+  "checks": [
+    {
+      "kind": "contribution",
+      "status": "entailed",
+      "durationMs": 41
+    }
+  ]
+}

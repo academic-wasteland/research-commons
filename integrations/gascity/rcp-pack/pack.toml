@@ -1,0 +1,9 @@
+[pack]
+name = "academic-wasteland/rcp"
+schema = 2
+version = "0.1.0"
+description = "Research Commons Protocol conformance tooling for Gas City rigs: validate RCP tasks and contributions, project them onto beads, publish to a Wasteland commons."
+
+[[pack.requires]]
+scope = "rig"
+agent = "rcp-worker"

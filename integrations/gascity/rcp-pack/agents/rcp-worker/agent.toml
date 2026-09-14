@@ -1,0 +1,5 @@
+scope = "rig"
+description = "Executes Research Commons Protocol tasks that passed the semantic gate and packages contributions."
+work_dir = "{{.RigRoot}}"
+nudge = "Run `bd ready --label rcp-task`. For each ready task follow the rcp-task formula. Never start analysis before validate-semantics returns entailed."
+idle_timeout = "30m"

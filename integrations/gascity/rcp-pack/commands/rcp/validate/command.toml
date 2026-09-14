@@ -1,0 +1,1 @@
+description = "Run RCP structural, SHACL, and (with --manifest) semantic validation on a JSON-LD message"

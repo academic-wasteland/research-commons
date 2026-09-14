@@ -1,0 +1,15 @@
+# Drop-in fragment for a lab's .beads/config.yaml.
+# `research-commons to-bead` emits records that satisfy these constraints.
+types:
+  custom: ""            # RCP beads use the built-in task/epic types; no custom type needed.
+
+validation:
+  metadata:
+    mode: error         # refuse beads whose metadata.rcp block is malformed
+    fields:
+      rcp:
+        type: object
+        required: false # non-RCP beads in the same database stay unaffected
+
+# Labels used by the projection (see integrations/beads/README.md):
+#   rcp-request, rcp-task, rcp-contribution, rcp-class:<TaskClassLocalName>, rcp-restricted-data

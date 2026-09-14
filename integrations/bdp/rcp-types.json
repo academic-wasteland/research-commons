@@ -1,0 +1,57 @@
+{
+  "$comment": "Bead Protocol (BDP, github.com/gastownhall/bdp, draft v0) Type Descriptors for RCP resources. A BDP store that serves RCP messages as beads advertises these under its /types listing and points propertiesSchema at the RCP JSON Schema so generic BDP clients can validate the wire shape without RCP-specific code.",
+  "types": [
+    {
+      "id": "https://w3id.org/research-commons/v0.1/bdp/types/ResearchRequest",
+      "name": "Research request",
+      "description": "A ResearchRequest message; properties are the JSON-LD document.",
+      "describes": "bead",
+      "conformsTo": [],
+      "propertiesSchema": "https://w3id.org/research-commons/v0.1/message.schema.json#/$defs/researchRequest"
+    },
+    {
+      "id": "https://w3id.org/research-commons/v0.1/bdp/types/ResearchTask",
+      "name": "Research task",
+      "description": "A ResearchTask message; properties are the JSON-LD document.",
+      "describes": "bead",
+      "conformsTo": [],
+      "propertiesSchema": "https://w3id.org/research-commons/v0.1/message.schema.json#/$defs/researchTask"
+    },
+    {
+      "id": "https://w3id.org/research-commons/v0.1/bdp/types/ResearchContribution",
+      "name": "Research contribution",
+      "description": "A ResearchContribution message; properties are the JSON-LD document.",
+      "describes": "bead",
+      "conformsTo": [],
+      "propertiesSchema": "https://w3id.org/research-commons/v0.1/message.schema.json#/$defs/researchContribution"
+    },
+    {
+      "id": "https://w3id.org/research-commons/v0.1/bdp/types/SemanticValidationReport",
+      "name": "Semantic validation report",
+      "describes": "bead",
+      "conformsTo": [],
+      "propertiesSchema": "https://w3id.org/research-commons/v0.1/semantic-validation-report.schema.json"
+    },
+    {
+      "id": "https://w3id.org/research-commons/v0.1/bdp/types/partOfRequest",
+      "name": "Part of request",
+      "describes": "link",
+      "source": {"types": ["https://w3id.org/research-commons/v0.1/bdp/types/ResearchTask"]},
+      "target": {"types": ["https://w3id.org/research-commons/v0.1/bdp/types/ResearchRequest"]}
+    },
+    {
+      "id": "https://w3id.org/research-commons/v0.1/bdp/types/addresses",
+      "name": "Addresses",
+      "describes": "link",
+      "source": {"types": ["https://w3id.org/research-commons/v0.1/bdp/types/ResearchContribution"]},
+      "target": {"types": ["https://w3id.org/research-commons/v0.1/bdp/types/ResearchTask"]}
+    },
+    {
+      "id": "https://w3id.org/research-commons/v0.1/bdp/types/validates",
+      "name": "Validates",
+      "describes": "link",
+      "source": {"types": ["https://w3id.org/research-commons/v0.1/bdp/types/SemanticValidationReport"]},
+      "target": {"types": ["https://w3id.org/research-commons/v0.1/bdp/types/ResearchContribution"]}
+    }
+  ]
+}

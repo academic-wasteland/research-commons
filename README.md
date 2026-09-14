@@ -31,6 +31,20 @@ uv run research-commons validate-semantics \
   --km-bin /path/to/km
 ```
 
+## Orchestrator integrations
+
+RCP messages can be projected onto the Gas Town ecosystem
+([gastownhall](https://github.com/gastownhall)) without giving up the semantic
+contract: beads for per-lab scheduling, Wasteland for a cross-institution
+ledger, a Gas City pack for rig agents, and BDP type descriptors.
+
+```bash
+uv run research-commons to-bead examples/metagenomics/task.jsonld | bd import -
+uv run research-commons to-wanted examples/metagenomics/task.jsonld --posted-by <rig> --sql
+```
+
+See `docs/gastownhall-integration.md`, ADR 0002, and `integrations/`.
+
 The motivating proposal is preserved in
 `federated_agentic_research_commons_biohackathon_2026.md`.
 
