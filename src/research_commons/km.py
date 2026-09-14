@@ -54,7 +54,9 @@ class KMRunner:
         started = time.monotonic()
         with tempfile.TemporaryDirectory(prefix="rcp-km-") as directory:
             ontology_path = Path(directory) / "query.ofn"
-            ontology_path.write_text(ontology, encoding="utf-8")
+            # KM does not unify `pg:Name` with `<full IRI>` spellings of the same entity, and
+            # message ABox axioms are rendered with full IRIs, so hand it one uniform spelling.
+            ontology_path.write_text(expand_prefixed_names(ontology), encoding="utf-8")
             try:
                 process = subprocess.Popen(
                     [self.executable, "classify", str(ontology_path)],
@@ -96,6 +98,41 @@ _PREFIX_LINE = re.compile(r"^\s*Prefix\(\s*([A-Za-z0-9_.-]*):=<([^>]+)>\s*\)", r
 def ontology_prefixes(ontology: str) -> dict[str, str]:
     """Prefix declarations of a Functional Syntax document, used to expand KM's prefixed names."""
     return {match.group(1): match.group(2) for match in _PREFIX_LINE.finditer(ontology)}
+
+
+_BRACKETED = re.compile(r"<[^>]*>")
+_PREFIXED_NAME = re.compile(r"(?<![\w<:/#-])([A-Za-z_][\w.-]*)?:([\w.-]+)")
+
+
+def expand_prefixed_names(ontology: str) -> str:
+    """Rewrite every prefixed name whose prefix is declared as a full <IRI>; leave Prefix lines alone."""
+    prefixes = ontology_prefixes(ontology)
+    if not prefixes:
+        return ontology
+
+    def rewrite(segment: str) -> str:
+        def replace(match: re.Match[str]) -> str:
+            prefix = match.group(1) or ""
+            if prefix not in prefixes:
+                return match.group(0)
+            return f"<{prefixes[prefix]}{match.group(2)}>"
+
+        return _PREFIXED_NAME.sub(replace, segment)
+
+    lines = []
+    for line in ontology.splitlines(keepends=True):
+        if line.lstrip().startswith("Prefix("):
+            lines.append(line)
+            continue
+        pieces = []
+        position = 0
+        for bracketed in _BRACKETED.finditer(line):
+            pieces.append(rewrite(line[position:bracketed.start()]))
+            pieces.append(bracketed.group(0))
+            position = bracketed.end()
+        pieces.append(rewrite(line[position:]))
+        lines.append("".join(pieces))
+    return "".join(lines)
 
 
 def expand_name(name: str, prefixes: dict[str, str]) -> str:
