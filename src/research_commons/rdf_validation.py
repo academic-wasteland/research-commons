@@ -76,7 +76,13 @@ def validate_crate_shacl(metadata: dict[str, Any]) -> ShaclResult:
 
 
 # Backwards compatibility re-exports for RO-Crate carrier functions
-from .ro_crate import ROCrateBuilder, build_crate, from_crate, to_crate, unpack_and_verify_crate  # noqa: E402
+from .ro_crate import (
+    ROCrateBuilder,
+    build_crate,
+    from_crate,
+    to_crate,
+    unpack_and_verify_crate,
+)
 
 __all__ = [
     "ROCrateBuilder",

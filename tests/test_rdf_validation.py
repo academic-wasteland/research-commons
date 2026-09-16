@@ -1,9 +1,9 @@
 import json
+
 import pytest
 
 from research_commons.rdf_validation import (
     ROCrateBuilder,
-    build_crate,
     from_crate,
     message_graph,
     to_crate,

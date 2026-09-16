@@ -122,7 +122,7 @@ def unpack_and_verify_crate(crate_dir: str | Path) -> dict[str, Any]:
 
     graph = metadata.get("@graph")
     if not isinstance(graph, list):
-        raise ValueError("RO-Crate metadata has no @graph list")
+        raise TypeError("RO-Crate metadata has no @graph list")
 
     entities_by_id = {entity.get("@id"): entity for entity in graph if isinstance(entity, dict)}
     action_entities = [
@@ -154,7 +154,7 @@ def unpack_and_verify_crate(crate_dir: str | Path) -> dict[str, Any]:
         raise ValueError(f"Failed to parse carried JSON-LD file: {err}") from err
 
     if not isinstance(extracted_doc, dict):
-        raise ValueError("Carried JSON-LD file is not a valid JSON object")
+        raise TypeError("Carried JSON-LD file is not a valid JSON object")
 
     calculated_digest = document_digest(extracted_doc)
     _verify_carrier_digests(calculated_digest, declared_digest, action_entities)
