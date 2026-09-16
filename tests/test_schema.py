@@ -60,3 +60,14 @@ def test_root_message_type_cannot_be_spoofed(repository_root):
 def test_all_json_examples_are_parseable(repository_root):
     for path in repository_root.glob("examples/**/*.json*"):
         json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_ro_crate_profile_schema_enforces_required_entities(repository_root):
+    # Empty or generic graph fails
+    invalid_crate = {
+        "@context": ["https://w3id.org/ro/crate/1.1/context"],
+        "@graph": [{"@id": "./", "@type": "Dataset"}],
+    }
+    with pytest.raises(StructuralValidationError):
+        validate_against(invalid_crate, "ro-crate-rcp-profile.json")
+

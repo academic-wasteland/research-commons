@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/research-commons/v0.1/ro-crate-rcp-profile.json",
+  "title": "RCP Workflow Run RO-Crate Profile",
+  "description": "Profile definition for carrying Research Commons Protocol (RCP) messages inside Workflow Run RO-Crates per ADR 0001 and ADR 0002.",
+  "type": "object",
+  "required": ["@context", "@graph"],
+  "properties": {
+    "@context": {
+      "oneOf": [
+        {"type": "string"},
+        {"type": "array"},
+        {"type": "object"}
+      ]
+    },
+    "@graph": {
+      "type": "array",
+      "allOf": [
+        {
+          "contains": {
+            "$ref": "#/definitions/rootDataEntity"
+          }
+        },
+        {
+          "contains": {
+            "$ref": "#/definitions/carriedFile"
+          }
+        },
+        {
+          "contains": {
+            "$ref": "#/definitions/createAction"
+          }
+        }
+      ],
+      "items": {
+        "type": "object",
+        "required": ["@id", "@type"]
+      }
+    }
+  },
+  "definitions": {
+    "profileMapping": {
+      "description": "Mapping definitions of base entities to standard RO-Crate 1.1 definitions and RCP context terms",
+      "baseEntities": {
+        "Dataset": "http://schema.org/Dataset",
+        "File": "http://schema.org/MediaObject",
+        "CreateAction": "http://schema.org/CreateAction",
+        "SoftwareApplication": "http://schema.org/SoftwareApplication"
+      },
+      "contextCompatibility": {
+        "contextIri": "https://w3id.org/research-commons/v0.1/context.jsonld",
+        "coexistenceNotes": "Maps RCP-specific terms alongside RO-Crate 1.1 context (https://w3id.org/ro/crate/1.1/context). Carrier file uses 'File' ('http://schema.org/MediaObject') and carries rcp:digest ('https://w3id.org/research-commons/v0.1/digest')."
+      }
+    },
+    "canonicalDigestSlot": {
+      "property": "digest",
+      "iri": "https://w3id.org/research-commons/v0.1/digest",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Slot for storing a canonical SHA-256 digest of the carried JSON-LD message per ADR 0002"
+    },
+    "rootDataEntity": {
+      "type": "object",
+      "required": ["@id", "@type", "hasPart", "conformsTo"],
+      "properties": {
+        "@id": {"const": "./"},
+        "@type": {
+          "oneOf": [
+            {"const": "Dataset"},
+            {"type": "array", "contains": {"const": "Dataset"}}
+          ]
+        },
+        "conformsTo": {
+          "description": "Reference to RO-Crate profile URIs"
+        },
+        "hasPart": {
+          "type": "array",
+          "description": "Must link to data entities including the carried RCP JSON-LD document",
+          "minItems": 1
+        },
+        "mentions": {
+          "description": "Reference to CreateAction execution entities"
+        }
+      }
+    },
+    "createAction": {
+      "type": "object",
+      "required": ["@id", "@type", "digest"],
+      "properties": {
+        "@id": {"type": "string"},
+        "@type": {
+          "oneOf": [
+            {"const": "CreateAction"},
+            {"type": "array", "contains": {"const": "CreateAction"}}
+          ]
+        },
+        "agent": {"description": "Agent executing the action"},
+        "instrument": {"description": "SoftwareApplication or tool executed"},
+        "object": {"description": "Inputs to the action, including carried task message or datasets"},
+        "result": {"description": "Outputs of the action, including carried contribution message or artifacts"},
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Canonical SHA-256 digest of the carried JSON-LD message"
+        }
+      }
+    },
+    "carriedFile": {
+      "type": "object",
+      "required": ["@id", "@type", "digest"],
+      "properties": {
+        "@id": {"type": "string"},
+        "@type": {
+          "oneOf": [
+            {"const": "File"},
+            {"type": "array", "contains": {"const": "File"}}
+          ]
+        },
+        "encodingFormat": {"const": "application/ld+json"},
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Canonical SHA-256 digest of the carried JSON-LD message"
+        }
+      }
+    }
+  }
+}

@@ -39,3 +39,27 @@ OBJECT_PROPERTIES = {
     "replicates": f"{RCP}replicates",
     "critiques": f"{RCP}critiques",
 }
+
+RO_CRATE_BASE_CONTEXT = {
+    "@version": 1.1,
+    "schema": "http://schema.org/",
+    "Dataset": "schema:Dataset",
+    "File": "schema:MediaObject",
+    "CreateAction": "schema:CreateAction",
+    "SoftwareApplication": "schema:SoftwareApplication",
+    "Person": "schema:Person",
+    "Organization": "schema:Organization",
+    "CreativeWork": "schema:CreativeWork",
+    "hasPart": {"@id": "schema:hasPart", "@type": "@id"},
+    "instrument": {"@id": "schema:instrument", "@type": "@id"},
+    "agent": {"@id": "schema:agent", "@type": "@id"},
+    "mentions": {"@id": "schema:mentions", "@type": "@id"},
+    "about": {"@id": "schema:about", "@type": "@id"},
+    "conformsTo": {"@id": "http://purl.org/dc/terms/conformsTo", "@type": "@id"},
+    "name": "schema:name",
+    "description": "schema:description",
+    "encodingFormat": "schema:encodingFormat",
+    "object": {"@id": "schema:object", "@type": "@id"},
+    "result": {"@id": "schema:result", "@type": "@id"},
+}
+
