@@ -91,6 +91,33 @@ def test_ro_crate_carrier_shacl_rejection(repository_root, tmp_path):
     assert not shacl_result.conforms
 
 
+def test_ro_crate_carrier_shacl_auxiliary_dataset_and_missing_haspart(repository_root, tmp_path):
+    task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "test_crate_shacl_aux"
+    builder.build_crate(task_doc, crate_dir)
+
+    metadata_path = crate_dir / "ro-crate-metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+
+    # Adding an auxiliary Dataset without hasPart should not violate RootDataEntityShape
+    metadata["@graph"].append({
+        "@id": "auxiliary-dataset",
+        "@type": "Dataset",
+        "name": "Auxiliary Dataset without parts",
+    })
+    shacl_result = validate_crate_shacl(metadata)
+    assert shacl_result.conforms, shacl_result.report
+
+    # Omitting the carried file from root Dataset's hasPart should be rejected
+    for entity in metadata["@graph"]:
+        if entity.get("@id") == "./":
+            entity["hasPart"] = [{"@id": "other-part.txt"}]
+
+    shacl_result_missing = validate_crate_shacl(metadata)
+    assert not shacl_result_missing.conforms
+
+
 @pytest.mark.parametrize(
     "doc_fixture_path",
     [
@@ -245,6 +272,8 @@ def test_ro_crate_unpack_rejects_ambiguous_carried_files(repository_root, tmp_pa
     for entity in metadata["@graph"]:
         if entity.get("@id") == "rcp-message.jsonld":
             entity["@id"] = "task1.jsonld"
+        if entity.get("@id") == "./":
+            entity["hasPart"] = [{"@id": "task1.jsonld"}, {"@id": "task2.jsonld"}]
         if entity.get("@type") == "CreateAction":
             entity["object"] = [{"@id": "task1.jsonld"}, {"@id": "task2.jsonld"}]
 

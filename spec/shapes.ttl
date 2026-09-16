@@ -25,12 +25,28 @@ rcp:ClaimShape a sh:NodeShape ;
   sh:property [ sh:path rcp:predicate ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
   sh:property [ sh:path rcp:object ; sh:minCount 1 ; sh:maxCount 1 ] .
 
+rcp:MetadataDescriptorShape a sh:NodeShape ;
+  sh:targetClass schema:CreativeWork ;
+  sh:property [
+    sh:path schema:about ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:node rcp:RootDataEntityShape ;
+  ] .
+
 rcp:RootDataEntityShape a sh:NodeShape ;
-  sh:targetClass schema:Dataset ;
+  sh:class schema:Dataset ;
   sh:property [
     sh:path schema:hasPart ;
-    sh:minCount 1 ;
-    sh:nodeKind sh:IRIOrLiteral ;
+    sh:qualifiedValueShape [
+      sh:nodeKind sh:IRI ;
+      sh:property [
+        sh:path [ sh:inversePath [ sh:alternativePath ( schema:object schema:result ) ] ] ;
+        sh:class schema:CreateAction ;
+        sh:minCount 1 ;
+      ] ;
+    ] ;
+    sh:qualifiedMinCount 1 ;
     sh:message "RO-Crate Root Data Entity must explicitly link to parts including the carried RCP JSON-LD file." ;
   ] .
 
