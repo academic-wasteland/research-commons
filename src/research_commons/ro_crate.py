@@ -95,6 +95,7 @@ def build_crate(
                 "datePublished": datetime.now(UTC).isoformat(),
                 "conformsTo": [
                     {"@id": "https://w3id.org/ro/crate/1.1"},
+                    {"@id": "https://w3id.org/ro/wfrun/process/0.1"},
                     {"@id": PROFILE_ID},
                 ],
                 "hasPart": [
@@ -271,7 +272,7 @@ def unpack_and_verify_crate(
                 ]
                 if not action_entities:
                     raise ValueError("RO-Crate metadata does not contain a CreateAction entity")
-                carried_file_entry = _locate_carried_file(graph, action_entities)
+                carried_file_entry = _locate_carried_file(graph, action_entities, None)
 
                 file_id = carried_file_entry.get("@id")
                 if not file_id or not isinstance(file_id, str):
@@ -337,7 +338,7 @@ def _unpack_and_verify_directory(path: Path) -> dict[str, Any]:
     if not action_entities:
         raise ValueError("RO-Crate metadata does not contain a CreateAction entity")
 
-    carried_file_entry = _locate_carried_file(graph, action_entities)
+    carried_file_entry = _locate_carried_file(graph, action_entities, path)
 
     declared_digest = carried_file_entry.get("digest")
     if not declared_digest or not isinstance(declared_digest, str):
@@ -470,6 +471,7 @@ def _extract_action_file_refs(action_entities: list[dict[str, Any]]) -> set[str]
 def _locate_carried_file(
     graph: list[dict[str, Any]],
     action_entities: list[dict[str, Any]],
+    base_dir: Path | None = None,
 ) -> dict[str, Any]:
     # First, identify the root dataset entity
     root_entity = next(
@@ -501,7 +503,7 @@ def _locate_carried_file(
         carrier_actions = action_entities
 
     # First pass: look for candidates linked by carrier_actions
-    candidates: list[dict[str, Any]] = []
+    raw_candidates: list[dict[str, Any]] = []
     for action in carrier_actions:
         action_file_refs = _extract_action_file_refs([action])
         for entity in graph:
@@ -518,11 +520,11 @@ def _locate_carried_file(
             is_action_ref = entity_id in action_file_refs
             is_root_part = not root_parts or entity_id in root_parts
 
-            if is_file and has_digest and is_jsonld and is_action_ref and is_root_part and entity not in candidates:
-                candidates.append(entity)
+            if is_file and has_digest and is_jsonld and is_action_ref and is_root_part and entity not in raw_candidates:
+                raw_candidates.append(entity)
 
     # If root_parts was restricted and yielded no candidate, check across carrier actions without root_parts
-    if not candidates:
+    if not raw_candidates:
         for action in carrier_actions:
             action_file_refs = _extract_action_file_refs([action])
             for entity in graph:
@@ -538,8 +540,44 @@ def _locate_carried_file(
                 is_jsonld = entity.get("encodingFormat") == "application/ld+json" or entity_id.endswith(".jsonld")
                 is_action_ref = entity_id in action_file_refs
 
-                if is_file and has_digest and is_jsonld and is_action_ref and entity not in candidates:
-                    candidates.append(entity)
+                if is_file and has_digest and is_jsonld and is_action_ref and entity not in raw_candidates:
+                    raw_candidates.append(entity)
+
+    # Disambiguate candidates by checking their about/@id and matching action derived ID
+    candidates: list[dict[str, Any]] = []
+    for cand in raw_candidates:
+        about = cand.get("about")
+        about_id = about.get("@id") if isinstance(about, dict) else about
+        if isinstance(about_id, str) and about_id:
+            expected_action_id = _derive_action_id(about_id)
+            cand_id = cand.get("@id")
+            if any(
+                a.get("@id") == expected_action_id and cand_id in _extract_action_file_refs([a])
+                for a in carrier_actions
+            ):
+                candidates.append(cand)
+            elif base_dir is not None:
+                # Check if payload contains valid RCP root types
+                try:
+                    p = _safe_resolve_crate_path(base_dir, cand_id)
+                    doc = load_json(p)
+                    if any(t in VALID_ROOT_TYPES for t in root_types(doc)):
+                        candidates.append(cand)
+                except Exception:
+                    pass
+        elif base_dir is not None:
+            cand_id = cand.get("@id")
+            try:
+                p = _safe_resolve_crate_path(base_dir, cand_id)
+                doc = load_json(p)
+                if any(t in VALID_ROOT_TYPES for t in root_types(doc)):
+                    candidates.append(cand)
+            except Exception:
+                pass
+
+    # If disambiguation filtered everything out, fall back to raw_candidates
+    if not candidates:
+        candidates = raw_candidates
 
     if len(candidates) == 1:
         return candidates[0]

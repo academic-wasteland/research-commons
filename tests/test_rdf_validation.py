@@ -809,4 +809,54 @@ def test_ro_crate_unpack_rejects_ambiguous_carried_files(repository_root, tmp_pa
         unpack_and_verify_crate(crate_dir)
 
 
+def test_ro_crate_workflow_run_profile_declaration(repository_root, tmp_path):
+    """Test that generated crates declare the Workflow Run RO-Crate profile and pass profile conformance."""
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "wfrun_crate"
+    builder.build_crate(original_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+
+    root_entity = next(e for e in metadata["@graph"] if e.get("@id") == "./")
+    conforms = [c.get("@id") for c in root_entity.get("conformsTo", []) if isinstance(c, dict)]
+    assert "https://w3id.org/ro/crate/1.1" in conforms
+    assert "https://w3id.org/ro/wfrun/process/0.1" in conforms
+    assert any("ro-crate-rcp-profile.json" in c for c in conforms)
+
+    # Ensure actions, parts, and objects conform
+    action = next(e for e in metadata["@graph"] if e.get("@type") == "CreateAction")
+    assert "actionStatus" in action or "instrument" in action or "object" in action
+
+
+def test_ro_crate_to_completion_automatic_crate_emission(repository_root, tmp_path):
+    """Test that CLI to-completion automatically emits a valid RO-Crate when requested."""
+    import subprocess
+    import sys
+
+    doc_path = repository_root / "examples/metagenomics/contribution.jsonld"
+    crate_out = tmp_path / "completion_crate.zip"
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "research_commons.cli",
+        "to-completion",
+        str(doc_path),
+        "--completed-by",
+        "did:key:z6MkuV8zD6H7338C",
+        "--crate-out",
+        str(crate_out),
+    ]
+    res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    assert crate_out.is_file()
+    assert crate_out.stat().st_size > 0
+
+    # Verify that the emitted crate unpacks and verifies correctly
+    unpacked = unpack_and_verify_crate(crate_out)
+    assert unpacked["@id"] == "urn:uuid:757d2882-b533-4fc2-9bd1-8c6b21227284"
+
+
+
 

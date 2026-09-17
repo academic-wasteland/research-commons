@@ -77,6 +77,7 @@ def parser() -> argparse.ArgumentParser:
     to_completion.add_argument("document", type=Path)
     to_completion.add_argument("--completed-by", required=True, help="Wasteland rig handle of the contributor")
     to_completion.add_argument("--hop-uri")
+    to_completion.add_argument("--crate-out", type=Path, help="Target directory or .zip archive to automatically emit Workflow Run RO-Crate")
     to_completion.add_argument("--sql", action="store_true")
 
     to_stamp = commands.add_parser("to-stamp", help="Render a semantic validation report as a Wasteland stamp")
@@ -178,8 +179,12 @@ def _ledger(arguments: argparse.Namespace) -> int:
         )
         return _emit_row("wanted", row, arguments.sql)
     if arguments.command == "to-completion":
+        raw_bytes = arguments.document.read_bytes()
+        doc = json.loads(raw_bytes.decode("utf-8"))
+        if arguments.crate_out:
+            to_crate(raw_bytes, arguments.crate_out)
         row = wasteland.contribution_to_completion(
-            load_json(arguments.document), completed_by=arguments.completed_by, hop_uri=arguments.hop_uri
+            doc, completed_by=arguments.completed_by, hop_uri=arguments.hop_uri
         )
         return _emit_row("completions", row, arguments.sql)
     if arguments.command == "to-crate":
