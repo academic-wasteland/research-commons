@@ -92,6 +92,13 @@ def build_crate(
             message_doc, msg_id, types, digest, workflow_tool=workflow_tool
         )
 
+        conforms_to = [
+            {"@id": "https://w3id.org/ro/crate/1.1"},
+            {"@id": PROFILE_ID},
+        ]
+        if workflow_tool is not None and instrument_entity is not None:
+            conforms_to.insert(1, {"@id": "https://w3id.org/ro/wfrun/process/0.1"})
+
         graph: list[dict[str, Any]] = [
             {
                 "@id": METADATA_FILENAME,
@@ -106,11 +113,7 @@ def build_crate(
                 "description": "RO-Crate packaging carrying verbatim Research Commons Protocol JSON-LD payload per ADR 0002",
                 "license": {"@id": "https://creativecommons.org/licenses/by/4.0/"},
                 "datePublished": datetime.now(UTC).isoformat(),
-                "conformsTo": [
-                    {"@id": "https://w3id.org/ro/crate/1.1"},
-                    {"@id": "https://w3id.org/ro/wfrun/process/0.1"},
-                    {"@id": PROFILE_ID},
-                ],
+                "conformsTo": conforms_to,
                 "hasPart": [
                     {"@id": MESSAGE_FILENAME},
                 ],
@@ -541,26 +544,6 @@ def _locate_carried_file(
             if is_file and has_digest and is_jsonld and is_action_ref and is_root_part and entity not in raw_candidates:
                 raw_candidates.append(entity)
 
-    # If root_parts was restricted and yielded no candidate, check across carrier actions without root_parts
-    if not raw_candidates:
-        for action in carrier_actions:
-            action_file_refs = _extract_action_file_refs([action])
-            for entity in graph:
-                if not isinstance(entity, dict):
-                    continue
-                entity_id = entity.get("@id", "")
-                if not isinstance(entity_id, str):
-                    continue
-                entity_type = entity.get("@type", [])
-                types = [entity_type] if isinstance(entity_type, str) else list(entity_type)
-                is_file = "File" in types or "http://schema.org/MediaObject" in types
-                has_digest = isinstance(entity.get("digest"), str)
-                is_jsonld = entity.get("encodingFormat") == "application/ld+json" or entity_id.endswith(".jsonld")
-                is_action_ref = entity_id in action_file_refs
-
-                if is_file and has_digest and is_jsonld and is_action_ref and entity not in raw_candidates:
-                    raw_candidates.append(entity)
-
     # Disambiguate candidates by checking their about/@id and matching action derived ID
     candidates: list[dict[str, Any]] = []
     for cand in raw_candidates:
@@ -568,10 +551,10 @@ def _locate_carried_file(
         about_id = about.get("@id") if isinstance(about, dict) else about
         if isinstance(about_id, str) and about_id:
             entity_id = cand.get("@id")
-            # First check if the action linking this candidate has the expected derived ID
+            # Enforce deterministic action derivation per ADR 0002
             expected_action_id = _derive_action_id(about_id)
             matching_action = any(
-                (a.get("@id") == expected_action_id or (isinstance(a.get("@id"), str) and a.get("@id", "").startswith("#action")))
+                a.get("@id") == expected_action_id
                 and entity_id in _extract_action_file_refs([a])
                 for a in carrier_actions
             )
@@ -653,9 +636,9 @@ def _verify_carrier_digests(
         action_file_refs = _extract_action_file_refs([action])
         if carried_file_id in action_file_refs:
             action_digest = action.get("digest")
-            if action_digest and action_digest != calculated_digest:
+            if action_digest != calculated_digest:
                 raise ValueError(
-                    f"CreateAction digest mismatch: action declared {action_digest}, calculated {calculated_digest}"
+                    f"CreateAction digest mismatch: action declared {action_digest!r}, calculated {calculated_digest!r}"
                 )
 
 
@@ -683,7 +666,8 @@ def _validate_carried_doc(
             f"Carried document identifier derivation mismatch: metadata about {about_id}, document @id {doc_id}"
         )
 
-    # Verify that at least one CreateAction references this carried file
+    # Verify that at least one CreateAction references this carried file with deterministic action @id
+    expected_action_id = _derive_action_id(doc_id)
     referencing_actions = [
         action
         for action in action_entities
@@ -692,4 +676,9 @@ def _validate_carried_doc(
     if not referencing_actions:
         raise ValueError(
             f"No CreateAction entity found referencing carried file {carried_file_id}"
+        )
+    if not any(action.get("@id") == expected_action_id for action in referencing_actions):
+        actual_ids = [action.get("@id") for action in referencing_actions]
+        raise ValueError(
+            f"CreateAction identifier derivation mismatch: expected {expected_action_id}, found {actual_ids}"
         )

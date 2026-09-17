@@ -181,11 +181,11 @@ def _ledger(arguments: argparse.Namespace) -> int:
     if arguments.command == "to-completion":
         raw_bytes = arguments.document.read_bytes()
         doc = json.loads(raw_bytes.decode("utf-8"))
-        if arguments.crate_out:
-            to_crate(raw_bytes, arguments.crate_out)
         row = wasteland.contribution_to_completion(
             doc, completed_by=arguments.completed_by, hop_uri=arguments.hop_uri
         )
+        if arguments.crate_out:
+            to_crate(raw_bytes, arguments.crate_out)
         return _emit_row("completions", row, arguments.sql)
     if arguments.command == "to-crate":
         out_path = to_crate(arguments.document.read_bytes(), arguments.output)

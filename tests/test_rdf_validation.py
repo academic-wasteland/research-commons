@@ -563,6 +563,8 @@ def test_ro_crate_directory_traversal_component_rejected(repository_root, tmp_pa
     for entity in metadata["@graph"]:
         if entity.get("@id") == ROCrateBuilder.MESSAGE_FILENAME:
             entity["@id"] = "nested/../rcp-message.jsonld"
+        if entity.get("@id") == "./":
+            entity["hasPart"] = [{"@id": "nested/../rcp-message.jsonld"}]
         if entity.get("@type") == "CreateAction":
             entity["object"] = {"@id": "nested/../rcp-message.jsonld"}
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
@@ -571,28 +573,23 @@ def test_ro_crate_directory_traversal_component_rejected(repository_root, tmp_pa
         unpack_and_verify_crate(crate_dir)
 
 
-def test_ro_crate_unpack_accepts_any_action_id_passing_profile(repository_root, tmp_path):
-    """Test that a crate with an arbitrary valid CreateAction @id from a third party is accepted."""
+def test_ro_crate_unpack_and_verify_action_id_mismatch_rejected(repository_root, tmp_path):
     original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()
-    crate_dir = tmp_path / "custom_action_id_crate"
+    crate_dir = tmp_path / "action_id_mismatch_crate"
     builder.build_crate(original_doc, crate_dir)
 
     metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    custom_action_id = "#custom-execution-node-999"
-
     for entity in metadata["@graph"]:
         if entity.get("@type") == "CreateAction":
-            entity["@id"] = custom_action_id
-        elif entity.get("@id") == "./" and "mentions" in entity:
-            entity["mentions"] = [{"@id": custom_action_id}]
-
+            entity["@id"] = "#action-000000000000"
+        if entity.get("@id") == "./":
+            entity["mentions"] = [{"@id": "#action-000000000000"}]
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
-    # The recovered message should be successfully recovered without failing on action ID derivation
-    recovered = unpack_and_verify_crate(crate_dir)
-    assert recovered["@id"] == original_doc["@id"]
+    with pytest.raises(ValueError, match="CreateAction identifier derivation mismatch"):
+        unpack_and_verify_crate(crate_dir)
 
 
 def test_ro_crate_unpack_and_verify_non_string_entity_id_cleanly_rejected(repository_root, tmp_path):
@@ -832,11 +829,16 @@ def test_ro_crate_unpack_rejects_ambiguous_carried_files(repository_root, tmp_pa
 
 
 def test_ro_crate_workflow_run_profile_declaration(repository_root, tmp_path):
-    """Test that generated crates declare the Workflow Run RO-Crate profile and pass profile conformance."""
+    """Test that generated crates declare the Workflow Run RO-Crate profile when workflow tool is present."""
     original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()
     crate_dir = tmp_path / "wfrun_crate"
-    builder.build_crate(original_doc, crate_dir)
+    tool = {
+        "@id": "https://example.org/tools/runner",
+        "@type": "SoftwareApplication",
+        "name": "Runner",
+    }
+    builder.build_crate(original_doc, crate_dir, workflow_tool=tool)
 
     metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -847,9 +849,55 @@ def test_ro_crate_workflow_run_profile_declaration(repository_root, tmp_path):
     assert "https://w3id.org/ro/wfrun/process/0.1" in conforms
     assert any("ro-crate-rcp-profile.json" in c for c in conforms)
 
-    # Ensure actions, parts, and objects conform
-    action = next(e for e in metadata["@graph"] if e.get("@type") == "CreateAction")
-    assert "actionStatus" in action or "instrument" in action or "object" in action
+    # For default crates without workflow_tool, process run profile should not be falsely claimed
+    plain_crate_dir = tmp_path / "plain_crate"
+    builder.build_crate(original_doc, plain_crate_dir)
+    plain_meta = json.loads((plain_crate_dir / ROCrateBuilder.METADATA_FILENAME).read_text(encoding="utf-8"))
+    plain_root = next(e for e in plain_meta["@graph"] if e.get("@id") == "./")
+    plain_conforms = [c.get("@id") for c in plain_root.get("conformsTo", []) if isinstance(c, dict)]
+    assert "https://w3id.org/ro/wfrun/process/0.1" not in plain_conforms
+
+
+def test_ro_crate_to_completion_rejects_task_without_emitting_crate(repository_root, tmp_path):
+    """Test that to-completion with --crate-out fails on task and does not create the crate."""
+    import subprocess
+    import sys
+
+    task_path = repository_root / "examples/metagenomics/task.jsonld"
+    crate_out = tmp_path / "should_not_exist.zip"
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "research_commons.cli",
+        "to-completion",
+        str(task_path),
+        "--completed-by",
+        "did:key:z6MkuV8zD6H7338C",
+        "--crate-out",
+        str(crate_out),
+    ]
+    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    assert res.returncode != 0
+    assert not crate_out.exists()
+
+
+def test_ro_crate_referencing_action_missing_digest_rejected(repository_root, tmp_path):
+    """Test that a referencing CreateAction missing a digest is rejected unconditionally."""
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "missing_digest_action_crate"
+    builder.build_crate(original_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    for entity in metadata["@graph"]:
+        if entity.get("@type") == "CreateAction":
+            del entity["digest"]
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(Exception, match="(CreateAction digest mismatch|RO-Crate metadata failed SHACL shape validation|does not contain items matching the given schema)"):
+        unpack_and_verify_crate(crate_dir)
 
 
 def test_ro_crate_to_completion_automatic_crate_emission(repository_root, tmp_path):
