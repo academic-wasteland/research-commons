@@ -248,15 +248,18 @@ def test_ro_crate_multi_action_unrelated_action_ignored(repository_root, tmp_pat
     metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
 
-    # Add an unrelated CreateAction for another artifact with its own digest
+    # Add an unrelated CreateAction for another artifact without any rcp:digest
     metadata["@graph"].append({
         "@id": "#unrelated-action",
         "@type": "CreateAction",
         "name": "Unrelated action",
         "object": {"@id": "some-input.txt"},
-        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     })
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    # Both SHACL validation and crate recovery must pass without requiring a digest on the unrelated action
+    shacl_res = validate_crate_shacl(metadata)
+    assert shacl_res.conforms, shacl_res.report
 
     recovered = from_crate(crate_dir)
     assert recovered == task_doc

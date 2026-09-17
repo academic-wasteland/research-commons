@@ -100,7 +100,27 @@ rcp:RootDataEntityShape a sh:NodeShape ;
   ] .
 
 rcp:CreateActionCarrierShape a sh:NodeShape ;
-  sh:targetClass schema:CreateAction ;
+  sh:target [
+    a sh:SPARQLTarget ;
+    sh:prefixes [
+      sh:declare [
+        sh:prefix "schema" ;
+        sh:namespace "http://schema.org/"^^xsd:anyURI ;
+      ]
+    ] ;
+    sh:select """
+      SELECT ?this WHERE {
+        ?this a schema:CreateAction .
+        ?desc a schema:CreativeWork ;
+              schema:about ?root .
+        FILTER (STR(?desc) = "ro-crate-metadata.json" || STRENDS(STR(?desc), "/ro-crate-metadata.json"))
+        ?root schema:hasPart ?file .
+        ?file a schema:MediaObject ;
+              schema:encodingFormat "application/ld+json" .
+        { ?this schema:object ?file } UNION { ?this schema:result ?file }
+      }
+    """ ;
+  ] ;
   sh:property [
     sh:path [ sh:alternativePath ( schema:object schema:result ) ] ;
     sh:minCount 1 ;

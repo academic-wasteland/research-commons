@@ -142,6 +142,7 @@ def validate_crate_shacl(metadata: dict[str, Any]) -> ShaclResult:
         inference="rdfs",
         abort_on_first=False,
         meta_shacl=False,
+        advanced=True,
     )
     return ShaclResult(bool(conforms), str(report))
 
