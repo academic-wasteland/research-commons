@@ -154,7 +154,10 @@
         "datePublished": {
           "description": "Publication date in ISO-8601 format",
           "type": "string",
-          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})?)?$"
+          "oneOf": [
+            {"format": "date"},
+            {"format": "date-time"}
+          ]
         },
         "conformsTo": {
           "description": "Reference to RO-Crate profile URIs",

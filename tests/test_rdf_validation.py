@@ -140,6 +140,23 @@ def test_ro_crate_graph_wfrun_context_allowed(repository_root, tmp_path):
     assert graph is not None
 
 
+def test_ro_crate_graph_nested_remote_context_rejected(repository_root, tmp_path):
+    task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "nested_remote_ctx_crate"
+    builder.build_crate(task_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    # Attacker embeds remote context inside an entity in @graph
+    for entity in metadata["@graph"]:
+        if entity.get("@id") == "./":
+            entity["@context"] = "https://attacker.invalid/injected.jsonld"
+
+    with pytest.raises(ValueError, match="Unsupported external context"):
+        ro_crate_graph(metadata)
+
+
 def test_ro_crate_graph_nested_or_non_string_context_rejected(repository_root, tmp_path):
     task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()

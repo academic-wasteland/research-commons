@@ -87,7 +87,7 @@ def parser() -> argparse.ArgumentParser:
     to_stamp.add_argument("--hop-uri")
     to_stamp.add_argument("--sql", action="store_true")
 
-    to_crate_cmd = commands.add_parser("to-crate", help="Package an RCP message into a Workflow Run RO-Crate")
+    to_crate_cmd = commands.add_parser("to-crate", help="Package an RCP message into an RO-Crate carrier")
     to_crate_cmd.add_argument("document", type=Path)
     to_crate_cmd.add_argument("output", type=Path, help="Target directory or .zip archive path")
 

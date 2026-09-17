@@ -44,9 +44,67 @@ def validate_shacl(document: dict[str, Any]) -> ShaclResult:
     return ShaclResult(bool(conforms), str(report))
 
 
+def _validate_and_resolve_context_element(
+    ctx: Any,
+    expected_iris: set[str],
+    local_rcp_context: dict[str, Any],
+    wfrun_contexts: set[str],
+) -> Any:
+    if isinstance(ctx, str):
+        if ctx not in expected_iris:
+            raise ValueError(f"Unsupported external context in RO-Crate metadata: {ctx}")
+        if ctx == "https://w3id.org/ro/crate/1.1/context":
+            return RO_CRATE_BASE_CONTEXT
+        if ctx == "https://w3id.org/research-commons/v0.1/context.jsonld":
+            return local_rcp_context
+        if ctx in wfrun_contexts:
+            return WFRUN_PROCESS_CONTEXT
+        return ctx
+    if isinstance(ctx, dict):
+        expected_overrides = {
+            "object": {"@id": "http://schema.org/object", "@type": "@id"},
+            "name": "http://schema.org/name",
+        }
+        for key, val in ctx.items():
+            if key not in expected_overrides or val != expected_overrides[key]:
+                raise ValueError(f"Unsupported context term override in RO-Crate metadata: {key}={val}")
+        return ctx
+    raise TypeError(f"Unsupported context entry in RO-Crate metadata: {ctx!r}")
+
+
+def _recursively_sanitize_contexts(
+    node: Any,
+    expected_iris: set[str],
+    local_rcp_context: dict[str, Any],
+    wfrun_contexts: set[str],
+) -> Any:
+    if isinstance(node, dict):
+        sanitized = {}
+        for key, val in node.items():
+            if key == "@context":
+                if isinstance(val, list):
+                    sanitized[key] = [
+                        _validate_and_resolve_context_element(elem, expected_iris, local_rcp_context, wfrun_contexts)
+                        for elem in val
+                    ]
+                else:
+                    sanitized[key] = _validate_and_resolve_context_element(
+                        val, expected_iris, local_rcp_context, wfrun_contexts
+                    )
+            else:
+                sanitized[key] = _recursively_sanitize_contexts(val, expected_iris, local_rcp_context, wfrun_contexts)
+        return sanitized
+    if isinstance(node, list):
+        return [
+            _recursively_sanitize_contexts(item, expected_iris, local_rcp_context, wfrun_contexts)
+            for item in node
+        ]
+    return node
+
+
 def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
     """Build RDF Graph for an RO-Crate metadata document using local context definitions."""
-    # Ensure declared @context does not contain unsupported or overriding external contexts
+    # Ensure declared top-level @context does not contain unsupported or overriding external contexts
     declared_context = metadata.get("@context")
     if not isinstance(declared_context, list):
         raise TypeError("RO-Crate metadata must have a list @context")
@@ -58,46 +116,15 @@ def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
         "https://w3id.org/ro/wfrun/workflow/0.1/context",
         "https://w3id.org/ro/wfrun/provenance/0.1/context",
     }
-    for ctx in declared_context:
-        if isinstance(ctx, str):
-            if ctx not in expected_iris:
-                raise ValueError(f"Unsupported external context in RO-Crate metadata: {ctx}")
-        elif isinstance(ctx, dict):
-            # Inline context definitions are only allowed to rebind known safe terms
-            expected_overrides = {
-                "object": {"@id": "http://schema.org/object", "@type": "@id"},
-                "name": "http://schema.org/name",
-            }
-            for key, val in ctx.items():
-                if key not in expected_overrides or val != expected_overrides[key]:
-                    raise ValueError(f"Unsupported context term override in RO-Crate metadata: {key}={val}")
-        else:
-            raise TypeError(f"Unsupported context entry in RO-Crate metadata: {ctx!r}")
-
-    local_rcp_context = load_json(SPEC_ROOT / "context.jsonld")["@context"]
-    # Replace each approved remote context with its local copy in place,
-    # preserving exact declaration order and inline contexts.
-    resolved_context: list[Any] = []
     wfrun_contexts = {
         "https://w3id.org/ro/wfrun/process/0.1/context",
         "https://w3id.org/ro/wfrun/workflow/0.1/context",
         "https://w3id.org/ro/wfrun/provenance/0.1/context",
     }
-    for ctx in declared_context:
-        if isinstance(ctx, str):
-            if ctx == "https://w3id.org/ro/crate/1.1/context":
-                resolved_context.append(RO_CRATE_BASE_CONTEXT)
-            elif ctx == "https://w3id.org/research-commons/v0.1/context.jsonld":
-                resolved_context.append(local_rcp_context)
-            elif ctx in wfrun_contexts:
-                resolved_context.append(WFRUN_PROCESS_CONTEXT)
-            else:
-                resolved_context.append(ctx)
-        else:
-            resolved_context.append(ctx)
+    local_rcp_context = load_json(SPEC_ROOT / "context.jsonld")["@context"]
 
-    expanded = copy.deepcopy(metadata)
-    expanded["@context"] = resolved_context
+    # Recursively validate and resolve @context at top level and any nested entities
+    expanded = _recursively_sanitize_contexts(metadata, expected_iris, local_rcp_context, wfrun_contexts)
     graph = Graph()
     graph.parse(data=json.dumps(expanded), format="json-ld")
     return graph
