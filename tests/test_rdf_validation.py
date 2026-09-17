@@ -318,6 +318,25 @@ def test_ro_crate_unpack_and_verify_id_mismatch_rejected(repository_root, tmp_pa
         unpack_and_verify_crate(crate_dir)
 
 
+def test_ro_crate_directory_traversal_component_rejected(repository_root, tmp_path):
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "traversal_crate"
+    builder.build_crate(original_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    for entity in metadata["@graph"]:
+        if entity.get("@id") == ROCrateBuilder.MESSAGE_FILENAME:
+            entity["@id"] = "nested/../rcp-message.jsonld"
+        if entity.get("@type") == "CreateAction":
+            entity["object"] = {"@id": "nested/../rcp-message.jsonld"}
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Path traversal detected in carried file reference"):
+        unpack_and_verify_crate(crate_dir)
+
+
 def test_ro_crate_unpack_and_verify_missing_about_rejected(repository_root, tmp_path):
     original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()

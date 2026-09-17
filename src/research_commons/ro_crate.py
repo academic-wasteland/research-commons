@@ -432,8 +432,13 @@ def _safe_resolve_crate_path(base_dir: Path, file_id: Any) -> Path:
     if "\\" in file_id or file_id.startswith("/") or "://" in file_id or ":" in file_id:
         raise ValueError(f"Path traversal or insecure path detected in carried file reference: {file_id}")
 
+    # Reject any ".." traversal path component before resolving
+    parts = [p for p in file_id.replace("\\", "/").split("/") if p]
+    if ".." in parts:
+        raise ValueError(f"Path traversal detected in carried file reference: {file_id}")
+
     resolved_base = base_dir.resolve()
-    carried_file_path = (resolved_base / file_id).resolve()
+    carried_file_path = (resolved_base / Path(*parts)).resolve()
     if not carried_file_path.is_relative_to(resolved_base) or carried_file_path == resolved_base:
         raise ValueError(f"Path traversal detected in carried file reference: {file_id}")
 
