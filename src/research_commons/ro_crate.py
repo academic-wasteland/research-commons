@@ -244,6 +244,8 @@ def unpack_and_verify_crate(
                 normalized_file_name = "/".join(file_parts)
 
                 # Extract only metadata and the carried file
+                if normalized_file_name not in zf.namelist():
+                    raise ValueError(f"Carried file '{normalized_file_name}' not found in zip archive")
                 zf.extract(METADATA_FILENAME, temp_dir)
                 zf.extract(normalized_file_name, temp_dir)
 

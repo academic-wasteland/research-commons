@@ -100,7 +100,26 @@
           }
         },
         "conformsTo": {
-          "description": "Reference to RO-Crate specification version"
+          "description": "Reference to RO-Crate specification version",
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["@id"],
+              "properties": {
+                "@id": {"const": "https://w3id.org/ro/crate/1.1"}
+              }
+            },
+            {
+              "type": "array",
+              "contains": {
+                "type": "object",
+                "required": ["@id"],
+                "properties": {
+                  "@id": {"const": "https://w3id.org/ro/crate/1.1"}
+                }
+              }
+            }
+          ]
         }
       }
     },

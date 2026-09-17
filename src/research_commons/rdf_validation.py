@@ -68,6 +68,8 @@ def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
             for key, val in ctx.items():
                 if key not in expected_overrides or val != expected_overrides[key]:
                     raise ValueError(f"Unsupported context term override in RO-Crate metadata: {key}={val}")
+        else:
+            raise TypeError(f"Unsupported context entry in RO-Crate metadata: {ctx!r}")
 
     local_rcp_context = load_json(SPEC_ROOT / "context.jsonld")["@context"]
     # Replace each approved remote context with its local copy in place,

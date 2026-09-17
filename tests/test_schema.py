@@ -62,6 +62,48 @@ def test_all_json_examples_are_parseable(repository_root):
         json.loads(path.read_text(encoding="utf-8"))
 
 
+def test_ro_crate_profile_schema_enforces_metadata_descriptor_conforms_to(repository_root):
+    # Metadata descriptor with invalid or missing conformsTo fails
+    valid_graph = [
+        {
+            "@id": "ro-crate-metadata.json",
+            "@type": "CreativeWork",
+            "conformsTo": {"@id": "https://attacker.invalid/wrong-ro-crate"},
+            "about": {"@id": "./"},
+        },
+        {
+            "@id": "./",
+            "@type": "Dataset",
+            "conformsTo": [
+                {"@id": "https://w3id.org/ro/crate/1.1"},
+                {"@id": "https://w3id.org/research-commons/v0.1/ro-crate-rcp-profile.json"},
+            ],
+            "hasPart": [{"@id": "rcp-message.jsonld"}],
+        },
+        {
+            "@id": "rcp-message.jsonld",
+            "@type": "File",
+            "encodingFormat": "application/ld+json",
+            "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "about": {"@id": "https://example.org/task-1"},
+        },
+        {
+            "@id": "#action",
+            "@type": "CreateAction",
+            "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        },
+    ]
+    invalid_crate = {
+        "@context": [
+            "https://w3id.org/ro/crate/1.1/context",
+            "https://w3id.org/research-commons/v0.1/context.jsonld",
+        ],
+        "@graph": valid_graph,
+    }
+    with pytest.raises(StructuralValidationError):
+        validate_against(invalid_crate, "ro-crate-rcp-profile.json")
+
+
 def test_ro_crate_profile_schema_enforces_metadata_descriptor(repository_root):
     # Missing ro-crate-metadata.json CreativeWork descriptor fails
     valid_graph_without_descriptor = [

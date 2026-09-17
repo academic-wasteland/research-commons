@@ -183,7 +183,7 @@ def _ledger(arguments: argparse.Namespace) -> int:
         )
         return _emit_row("completions", row, arguments.sql)
     if arguments.command == "to-crate":
-        out_path = to_crate(load_json(arguments.document), arguments.output)
+        out_path = to_crate(arguments.document.read_bytes(), arguments.output)
         _print({"status": "created", "crate": str(out_path)})
         return 0
     if arguments.command == "from-crate":

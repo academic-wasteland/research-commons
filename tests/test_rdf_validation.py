@@ -78,6 +78,35 @@ def test_shacl_requires_explicit_producer(repository_root):
     assert not result.conforms
 
 
+def test_ro_crate_zip_archive_missing_carried_file_rejected(repository_root, tmp_path):
+    task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "valid_crate"
+    builder.build_crate(task_doc, crate_dir)
+
+    zip_path = tmp_path / "missing_payload.crate.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.write(crate_dir / "ro-crate-metadata.json", arcname="ro-crate-metadata.json")
+        # Do not include rcp-message.jsonld
+
+    with pytest.raises(ValueError, match="not found in zip archive"):
+        unpack_and_verify_crate(zip_path)
+
+
+def test_ro_crate_graph_nested_or_non_string_context_rejected(repository_root, tmp_path):
+    task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "nested_ctx_crate"
+    builder.build_crate(task_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["@context"].append(["https://attacker.invalid/nested.jsonld"])
+
+    with pytest.raises(TypeError, match="Unsupported context entry"):
+        ro_crate_graph(metadata)
+
+
 def test_ro_crate_graph_unsupported_context_rejected(repository_root, tmp_path):
     task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()
