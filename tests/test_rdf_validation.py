@@ -44,7 +44,7 @@ def test_ro_crate_serialized_context_jsonld_expansion():
 
         graph = ro_crate_graph(metadata)
         # Check that triple (?action, schema:object, rcp-message.jsonld) is in the graph
-        schema_object = URIRef("https://schema.org/object")
+        schema_object = URIRef("http://schema.org/object")
         rcp_object = URIRef("https://w3id.org/research-commons/v0.1/object")
 
         predicates = {p for _, p, _ in graph}

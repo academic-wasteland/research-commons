@@ -126,8 +126,8 @@ def build_crate(rcp_message: dict[str, Any] | str | bytes, output_target: str | 
                 "https://w3id.org/ro/crate/1.1/context",
                 "https://w3id.org/research-commons/v0.1/context.jsonld",
                 {
-                    "object": {"@id": "schema:object", "@type": "@id"},
-                    "name": "schema:name",
+                    "object": {"@id": "http://schema.org/object", "@type": "@id"},
+                    "name": "http://schema.org/name",
                 },
             ],
             "@graph": graph,
@@ -257,13 +257,15 @@ def unpack_and_verify_crate(
 
 def _unpack_and_verify_directory(path: Path) -> dict[str, Any]:
     resolved_path = path.resolve()
-    metadata_file = (resolved_path / METADATA_FILENAME).resolve()
+    metadata_unresolved = resolved_path / METADATA_FILENAME
+    if not metadata_unresolved.exists():
+        raise ValueError(f"Missing {METADATA_FILENAME} in {path}")
+    if not metadata_unresolved.is_file() or metadata_unresolved.is_symlink():
+        raise ValueError(f"Invalid metadata file (must be regular file, not symlink): {metadata_unresolved}")
+
+    metadata_file = metadata_unresolved.resolve()
     if not metadata_file.is_relative_to(resolved_path) or metadata_file == resolved_path:
         raise ValueError(f"Metadata file path traversal detected: {metadata_file}")
-    if not metadata_file.exists():
-        raise ValueError(f"Missing {METADATA_FILENAME} in {path}")
-    if not metadata_file.is_file() or metadata_file.is_symlink():
-        raise ValueError(f"Invalid metadata file (must be regular file, not symlink): {metadata_file}")
 
     try:
         metadata = load_json(metadata_file)

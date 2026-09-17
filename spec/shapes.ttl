@@ -1,7 +1,7 @@
 @prefix rcp: <https://w3id.org/research-commons/v0.1/> .
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix schema: <https://schema.org/> .
+@prefix schema: <http://schema.org/> .
 
 rcp:ResearchTaskShape a sh:NodeShape ;
   sh:targetClass rcp:ResearchTask ;

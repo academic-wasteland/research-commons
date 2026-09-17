@@ -64,8 +64,8 @@ def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
         elif isinstance(ctx, dict):
             # Inline context definitions are only allowed to rebind known safe terms
             expected_overrides = {
-                "object": {"@id": "schema:object", "@type": "@id"},
-                "name": "schema:name",
+                "object": {"@id": "http://schema.org/object", "@type": "@id"},
+                "name": "http://schema.org/name",
             }
             for key, val in ctx.items():
                 if key not in expected_overrides or val != expected_overrides[key]:
@@ -79,8 +79,8 @@ def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
         RO_CRATE_BASE_CONTEXT,
         local_rcp_context,
         {
-            "object": {"@id": "schema:object", "@type": "@id"},
-            "name": "schema:name",
+            "object": {"@id": "http://schema.org/object", "@type": "@id"},
+            "name": "http://schema.org/name",
         },
     ]
     expanded["@context"] = crate_context
