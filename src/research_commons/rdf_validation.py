@@ -48,11 +48,13 @@ def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
     """Build RDF Graph for an RO-Crate metadata document using local context definitions."""
     expanded = copy.deepcopy(metadata)
     local_rcp_context = load_json(SPEC_ROOT / "context.jsonld")["@context"]
-    crate_context = dict(RO_CRATE_BASE_CONTEXT)
-    for key, value in local_rcp_context.items():
-        if key not in crate_context:
-            crate_context[key] = value
-
+    # Preserve standard JSON-LD semantics by following the serialized context array:
+    # RO-Crate base context, then RCP context, then explicit preservation of schema:object.
+    crate_context: list[Any] = [
+        RO_CRATE_BASE_CONTEXT,
+        local_rcp_context,
+        {"object": {"@id": "schema:object", "@type": "@id"}},
+    ]
     expanded["@context"] = crate_context
     graph = Graph()
     graph.parse(data=json.dumps(expanded), format="json-ld")

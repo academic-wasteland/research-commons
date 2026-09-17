@@ -122,6 +122,7 @@ def build_crate(rcp_message: dict[str, Any] | str | bytes, output_target: str | 
             "@context": [
                 "https://w3id.org/ro/crate/1.1/context",
                 "https://w3id.org/research-commons/v0.1/context.jsonld",
+                {"object": {"@id": "schema:object", "@type": "@id"}},
             ],
             "@graph": graph,
         }

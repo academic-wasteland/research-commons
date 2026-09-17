@@ -3,10 +3,12 @@ import zipfile
 
 import pytest
 
+from research_commons.constants import SPEC_ROOT
 from research_commons.rdf_validation import (
     ROCrateBuilder,
     from_crate,
     message_graph,
+    ro_crate_graph,
     to_crate,
     unpack_and_verify_crate,
     validate_crate_shacl,
@@ -25,6 +27,29 @@ def test_direct_ro_crate_module_import():
     assert hasattr(research_commons.ro_crate, "ROCrateBuilder")
     assert hasattr(research_commons.ro_crate, "build_crate")
     assert hasattr(research_commons.ro_crate, "unpack_and_verify_crate")
+
+
+def test_ro_crate_serialized_context_jsonld_expansion():
+    # Verify that serialized metadata @context expands CreateAction.object as schema:object
+    import tempfile
+
+    from rdflib import URIRef
+
+    from research_commons.ro_crate import build_crate
+
+    task_doc = load_json(SPEC_ROOT.parent / "examples/metagenomics/task.jsonld")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        crate_path = build_crate(task_doc, tmp_dir)
+        metadata = json.loads((crate_path / "ro-crate-metadata.json").read_text(encoding="utf-8"))
+
+        graph = ro_crate_graph(metadata)
+        # Check that triple (?action, schema:object, rcp-message.jsonld) is in the graph
+        schema_object = URIRef("http://schema.org/object")
+        rcp_object = URIRef("https://w3id.org/research-commons/v0.1/object")
+
+        predicates = {p for _, p, _ in graph}
+        assert schema_object in predicates, "Expected schema:object in expanded graph"
+        assert rcp_object not in predicates, "Unexpected rcp:object override on CreateAction"
 
 
 def test_task_jsonld_expands_without_network(repository_root):
