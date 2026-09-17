@@ -91,6 +91,9 @@ def build_crate(
             {
                 "@id": "./",
                 "@type": "Dataset",
+                "name": f"RO-Crate carrier for RCP message {msg_id}",
+                "description": "RO-Crate packaging carrying verbatim Research Commons Protocol JSON-LD payload per ADR 0002",
+                "license": {"@id": "https://creativecommons.org/licenses/by/4.0/"},
                 "datePublished": datetime.now(UTC).isoformat(),
                 "conformsTo": [
                     {"@id": "https://w3id.org/ro/crate/1.1"},
@@ -141,12 +144,18 @@ def build_crate(
                 {
                     "object": {"@id": "http://schema.org/object", "@type": "@id"},
                     "name": "http://schema.org/name",
+                    "license": {"@id": "http://schema.org/license", "@type": "@id"},
                 },
             ],
             "@graph": graph,
         }
 
         validate_against(crate_metadata, PROFILE_SCHEMA)
+        from .rdf_validation import validate_crate_shacl
+
+        shacl_res = validate_crate_shacl(crate_metadata)
+        if not shacl_res.conforms:
+            raise ValueError(f"Assembled RO-Crate metadata failed SHACL shape validation: {shacl_res.report}")
 
         metadata_file = out_path / METADATA_FILENAME
         metadata_file.write_text(json.dumps(crate_metadata, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -354,7 +363,7 @@ from_crate = unpack_and_verify_crate
 
 
 class ROCrateBuilder:
-    """Builder for Workflow Run RO-Crates carrying RCP messages per ADR 0002."""
+    """Builder for RO-Crates carrying RCP messages per ADR 0002."""
 
     MESSAGE_FILENAME = MESSAGE_FILENAME
     METADATA_FILENAME = METADATA_FILENAME

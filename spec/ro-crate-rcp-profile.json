@@ -14,10 +14,7 @@
             "type": "string",
             "enum": [
               "https://w3id.org/ro/crate/1.1/context",
-              "https://w3id.org/research-commons/v0.1/context.jsonld",
-              "https://w3id.org/ro/wfrun/process/0.1/context",
-              "https://w3id.org/ro/wfrun/workflow/0.1/context",
-              "https://w3id.org/ro/wfrun/provenance/0.1/context"
+              "https://w3id.org/research-commons/v0.1/context.jsonld"
             ]
           },
           {
@@ -168,6 +165,19 @@
             "properties": {
               "@id": {"const": "https://w3id.org/research-commons/v0.1/ro-crate-rcp-profile.json"}
             }
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "license": {
+          "type": "object",
+          "required": ["@id"],
+          "properties": {
+            "@id": {"type": "string"}
           }
         },
         "hasPart": {

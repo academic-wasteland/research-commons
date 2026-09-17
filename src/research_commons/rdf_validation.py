@@ -8,7 +8,7 @@ from typing import Any
 from pyshacl import validate
 from rdflib import Graph
 
-from .constants import RO_CRATE_BASE_CONTEXT, SPEC_ROOT, WFRUN_PROCESS_CONTEXT
+from .constants import RO_CRATE_BASE_CONTEXT, SPEC_ROOT
 from .schema import load_json
 
 
@@ -48,7 +48,6 @@ def _validate_and_resolve_context_element(
     ctx: Any,
     expected_iris: set[str],
     local_rcp_context: dict[str, Any],
-    wfrun_contexts: set[str],
 ) -> Any:
     if isinstance(ctx, str):
         if ctx not in expected_iris:
@@ -57,13 +56,12 @@ def _validate_and_resolve_context_element(
             return RO_CRATE_BASE_CONTEXT
         if ctx == "https://w3id.org/research-commons/v0.1/context.jsonld":
             return local_rcp_context
-        if ctx in wfrun_contexts:
-            return WFRUN_PROCESS_CONTEXT
         return ctx
     if isinstance(ctx, dict):
         expected_overrides = {
             "object": {"@id": "http://schema.org/object", "@type": "@id"},
             "name": "http://schema.org/name",
+            "license": {"@id": "http://schema.org/license", "@type": "@id"},
         }
         for key, val in ctx.items():
             if key not in expected_overrides or val != expected_overrides[key]:
@@ -76,7 +74,6 @@ def _recursively_sanitize_contexts(
     node: Any,
     expected_iris: set[str],
     local_rcp_context: dict[str, Any],
-    wfrun_contexts: set[str],
 ) -> Any:
     if isinstance(node, dict):
         sanitized = {}
@@ -84,19 +81,19 @@ def _recursively_sanitize_contexts(
             if key == "@context":
                 if isinstance(val, list):
                     sanitized[key] = [
-                        _validate_and_resolve_context_element(elem, expected_iris, local_rcp_context, wfrun_contexts)
+                        _validate_and_resolve_context_element(elem, expected_iris, local_rcp_context)
                         for elem in val
                     ]
                 else:
                     sanitized[key] = _validate_and_resolve_context_element(
-                        val, expected_iris, local_rcp_context, wfrun_contexts
+                        val, expected_iris, local_rcp_context
                     )
             else:
-                sanitized[key] = _recursively_sanitize_contexts(val, expected_iris, local_rcp_context, wfrun_contexts)
+                sanitized[key] = _recursively_sanitize_contexts(val, expected_iris, local_rcp_context)
         return sanitized
     if isinstance(node, list):
         return [
-            _recursively_sanitize_contexts(item, expected_iris, local_rcp_context, wfrun_contexts)
+            _recursively_sanitize_contexts(item, expected_iris, local_rcp_context)
             for item in node
         ]
     return node
@@ -112,19 +109,11 @@ def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
     expected_iris = {
         "https://w3id.org/ro/crate/1.1/context",
         "https://w3id.org/research-commons/v0.1/context.jsonld",
-        "https://w3id.org/ro/wfrun/process/0.1/context",
-        "https://w3id.org/ro/wfrun/workflow/0.1/context",
-        "https://w3id.org/ro/wfrun/provenance/0.1/context",
-    }
-    wfrun_contexts = {
-        "https://w3id.org/ro/wfrun/process/0.1/context",
-        "https://w3id.org/ro/wfrun/workflow/0.1/context",
-        "https://w3id.org/ro/wfrun/provenance/0.1/context",
     }
     local_rcp_context = load_json(SPEC_ROOT / "context.jsonld")["@context"]
 
     # Recursively validate and resolve @context at top level and any nested entities
-    expanded = _recursively_sanitize_contexts(metadata, expected_iris, local_rcp_context, wfrun_contexts)
+    expanded = _recursively_sanitize_contexts(metadata, expected_iris, local_rcp_context)
     graph = Graph()
     graph.parse(data=json.dumps(expanded), format="json-ld")
     return graph

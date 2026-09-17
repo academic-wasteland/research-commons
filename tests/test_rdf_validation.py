@@ -126,18 +126,41 @@ def test_ro_crate_builder_with_instrument_entity(repository_root, tmp_path):
     assert recovered["@id"] == task_doc["@id"]
 
 
-def test_ro_crate_graph_wfrun_context_allowed(repository_root, tmp_path):
+def test_ro_crate_builder_with_tool_unapproved_context_rejected(repository_root, tmp_path):
+    task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    workflow_tool = {
+        "@id": "https://example.org/software/predictor",
+        "@type": "SoftwareApplication",
+        "name": "Predictor Tool",
+        "@context": "https://attacker.invalid/injected.jsonld",
+    }
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "bad_tool_crate"
+
+    with pytest.raises(ValueError, match="Unsupported external context"):
+        builder.build_crate(task_doc, crate_dir, workflow_tool=workflow_tool)
+
+
+def test_ro_crate_root_entity_metadata_properties(repository_root, tmp_path):
     task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()
-    crate_dir = tmp_path / "wfrun_crate"
+    crate_dir = tmp_path / "metadata_crate"
     builder.build_crate(task_doc, crate_dir)
 
     metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    metadata["@context"].append("https://w3id.org/ro/wfrun/process/0.1/context")
+    root_entity = next(e for e in metadata["@graph"] if e.get("@id") == "./")
 
+    assert "name" in root_entity
+    assert "description" in root_entity
+    assert root_entity.get("license") == {"@id": "https://creativecommons.org/licenses/by/4.0/"}
+
+    # Verify license maps to schema:license in RDF graph
     graph = ro_crate_graph(metadata)
-    assert graph is not None
+    from rdflib import URIRef
+    schema_license = URIRef("http://schema.org/license")
+    predicates = {p for _, p, _ in graph}
+    assert schema_license in predicates
 
 
 def test_ro_crate_graph_nested_remote_context_rejected(repository_root, tmp_path):
