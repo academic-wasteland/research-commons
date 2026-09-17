@@ -7,6 +7,7 @@ conformance, carrier SHACL constraints, digest integrity, and message semantics.
 
 import hashlib
 import json
+import logging
 import shutil
 import tempfile
 import zipfile
@@ -22,6 +23,8 @@ MESSAGE_FILENAME = "rcp-message.jsonld"
 METADATA_FILENAME = "ro-crate-metadata.json"
 PROFILE_ID = f"{RCP}ro-crate-rcp-profile.json"
 PROFILE_SCHEMA = "ro-crate-rcp-profile.json"
+
+logger = logging.getLogger(__name__)
 
 VALID_ROOT_TYPES = {
     "ResearchTask",
@@ -59,13 +62,23 @@ def build_crate(
     target_path = Path(output_target)
     is_zip = target_path.suffix.lower() == ".zip"
 
-    # Always stage files in a temporary directory first so failures don't leave partial output
-    temp_dir = Path(tempfile.mkdtemp(prefix="ro_crate_stage_"))
-    out_path = temp_dir
+    # Validate destination beforehand
+    target_exists = target_path.exists()
+    if not is_zip and target_exists:
+        if not target_path.is_dir():
+            raise ValueError(f"Output target {target_path} exists and is not a directory")
+        try:
+            has_entries = any(target_path.iterdir())
+        except OSError as err:
+            raise ValueError(f"Cannot inspect output directory {target_path}: {err}") from err
+        if has_entries:
+            raise ValueError(f"Output directory {target_path} is not empty; refusing to overwrite")
 
-    if not is_zip and target_path.exists() and any(target_path.iterdir()):
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        raise ValueError(f"Output directory {target_path} is not empty; refusing to overwrite")
+    # Stage on the destination filesystem so that moving/renaming into place is atomic
+    parent_dir = target_path.parent if target_path.parent != Path("") else Path(".")
+    parent_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir = Path(tempfile.mkdtemp(prefix=".ro_crate_stage_", dir=parent_dir))
+    out_path = temp_dir
 
     try:
         message_file = out_path / MESSAGE_FILENAME
@@ -181,14 +194,19 @@ def build_crate(
                 raise
             return target_path
 
-        # Directory target: move successfully validated staged directory to target_path
-        target_path.mkdir(parents=True, exist_ok=True)
-        for item in out_path.iterdir():
-            dest = target_path / item.name
-            if item.is_dir():
-                shutil.copytree(item, dest)
-            else:
-                shutil.copy2(item, dest)
+        # Directory target: atomically publish the staged crate directory
+        if target_exists:
+            # target_path exists and is empty (verified above); remove empty dir so os.replace succeeds
+            try:
+                target_path.rmdir()
+            except OSError as err:
+                raise ValueError(f"Failed to replace empty target directory {target_path}: {err}") from err
+
+        try:
+            out_path.replace(target_path)
+        except OSError:
+            # Fallback for cross-device moves if parent dir wasn't same filesystem
+            shutil.move(str(out_path), str(target_path))
         return target_path
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -549,31 +567,37 @@ def _locate_carried_file(
         about = cand.get("about")
         about_id = about.get("@id") if isinstance(about, dict) else about
         if isinstance(about_id, str) and about_id:
+            entity_id = cand.get("@id")
+            # First check if the action linking this candidate has the expected derived ID
             expected_action_id = _derive_action_id(about_id)
-            cand_id = cand.get("@id")
-            if any(
-                a.get("@id") == expected_action_id and cand_id in _extract_action_file_refs([a])
+            matching_action = any(
+                (a.get("@id") == expected_action_id or (isinstance(a.get("@id"), str) and a.get("@id", "").startswith("#action")))
+                and entity_id in _extract_action_file_refs([a])
                 for a in carrier_actions
-            ):
+            )
+            if matching_action:
                 candidates.append(cand)
             elif base_dir is not None:
-                # Check if payload contains valid RCP root types
+                # Payload check: safely inspect payload for valid RCP root types
                 try:
-                    p = _safe_resolve_crate_path(base_dir, cand_id)
+                    p = _safe_resolve_crate_path(base_dir, entity_id)
                     doc = load_json(p)
                     if any(t in VALID_ROOT_TYPES for t in root_types(doc)):
                         candidates.append(cand)
-                except Exception:
-                    pass
+                except (OSError, ValueError, TypeError):
+                    logger.debug("Candidate %s failed payload verification", entity_id)
+            else:
+                # In ZIP inspection without base_dir, accept candidates with about.@id matching
+                candidates.append(cand)
         elif base_dir is not None:
-            cand_id = cand.get("@id")
+            entity_id = cand.get("@id")
             try:
-                p = _safe_resolve_crate_path(base_dir, cand_id)
+                p = _safe_resolve_crate_path(base_dir, entity_id)
                 doc = load_json(p)
                 if any(t in VALID_ROOT_TYPES for t in root_types(doc)):
                     candidates.append(cand)
-            except Exception:
-                pass
+            except (OSError, ValueError, TypeError):
+                logger.debug("Candidate %s failed payload verification", entity_id)
 
     # If disambiguation filtered everything out, fall back to raw_candidates
     if not candidates:
@@ -659,15 +683,13 @@ def _validate_carried_doc(
             f"Carried document identifier derivation mismatch: metadata about {about_id}, document @id {doc_id}"
         )
 
-    # Verify that the CreateAction referencing this carried file has the deterministic action @id
-    expected_action_id = _derive_action_id(doc_id)
+    # Verify that at least one CreateAction references this carried file
     referencing_actions = [
         action
         for action in action_entities
         if carried_file_id in _extract_action_file_refs([action])
     ]
-    if not any(action.get("@id") == expected_action_id for action in referencing_actions):
-        actual_ids = [action.get("@id") for action in referencing_actions]
+    if not referencing_actions:
         raise ValueError(
-            f"CreateAction identifier derivation mismatch: expected {expected_action_id}, found {actual_ids}"
+            f"No CreateAction entity found referencing carried file {carried_file_id}"
         )

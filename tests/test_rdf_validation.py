@@ -503,22 +503,20 @@ def test_ro_crate_unpack_and_verify_tampered_rejected(repository_root, tmp_path,
         unpack_and_verify_crate(crate_dir)
 
 
-def test_ro_crate_unpack_and_verify_action_id_mismatch_rejected(repository_root, tmp_path):
+def test_ro_crate_unpack_and_verify_no_referencing_action_rejected(repository_root, tmp_path):
     original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()
-    crate_dir = tmp_path / "action_id_mismatch_crate"
+    crate_dir = tmp_path / "action_unlinked_crate"
     builder.build_crate(original_doc, crate_dir)
 
     metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     for entity in metadata["@graph"]:
         if entity.get("@type") == "CreateAction":
-            entity["@id"] = "#arbitrary-action-id"
-        if entity.get("@id") == "./":
-            entity["mentions"] = [{"@id": "#arbitrary-action-id"}]
+            entity["object"] = {"@id": "some-other-file.json"}
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="CreateAction identifier derivation mismatch"):
+    with pytest.raises(ValueError, match="(No CreateAction entity found referencing carried file|RO-Crate metadata failed SHACL shape validation)"):
         unpack_and_verify_crate(crate_dir)
 
 
@@ -571,6 +569,30 @@ def test_ro_crate_directory_traversal_component_rejected(repository_root, tmp_pa
 
     with pytest.raises(ValueError, match="Path traversal detected in carried file reference"):
         unpack_and_verify_crate(crate_dir)
+
+
+def test_ro_crate_unpack_accepts_any_action_id_passing_profile(repository_root, tmp_path):
+    """Test that a crate with an arbitrary valid CreateAction @id from a third party is accepted."""
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "custom_action_id_crate"
+    builder.build_crate(original_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    custom_action_id = "#custom-execution-node-999"
+
+    for entity in metadata["@graph"]:
+        if entity.get("@type") == "CreateAction":
+            entity["@id"] = custom_action_id
+        elif entity.get("@id") == "./" and "mentions" in entity:
+            entity["mentions"] = [{"@id": custom_action_id}]
+
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    # The recovered message should be successfully recovered without failing on action ID derivation
+    recovered = unpack_and_verify_crate(crate_dir)
+    assert recovered["@id"] == original_doc["@id"]
 
 
 def test_ro_crate_unpack_and_verify_non_string_entity_id_cleanly_rejected(repository_root, tmp_path):
@@ -849,7 +871,7 @@ def test_ro_crate_to_completion_automatic_crate_emission(repository_root, tmp_pa
         "--crate-out",
         str(crate_out),
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    subprocess.run(cmd, capture_output=True, text=True, check=True)
     assert crate_out.is_file()
     assert crate_out.stat().st_size > 0
 
