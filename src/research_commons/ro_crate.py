@@ -237,7 +237,7 @@ def _unpack_and_verify_directory(path: Path) -> dict[str, Any]:
 
     calculated_digest = document_digest(extracted_doc)
     _verify_carrier_digests(calculated_digest, declared_digest, action_entities, file_id)
-    _validate_carried_doc(extracted_doc, carried_file_entry)
+    _validate_carried_doc(extracted_doc, carried_file_entry, action_entities, file_id)
 
     return extracted_doc
 
@@ -257,17 +257,20 @@ class ROCrateBuilder:
         return build_crate(rcp_message, output_target)
 
 
+def _derive_action_id(msg_id: str) -> str:
+    if msg_id:
+        hashed_id = hashlib.sha256(msg_id.encode("utf-8")).hexdigest()[:12]
+        return f"#action-{hashed_id}"
+    return "#action"
+
+
 def _assemble_action_entity(
     rcp_message: dict[str, Any], msg_id: str, types: set[str], digest: str
 ) -> tuple[str, dict[str, Any]]:
     is_contribution = "ResearchContribution" in types or f"{RCP}ResearchContribution" in types
     is_task = "ResearchTask" in types or f"{RCP}ResearchTask" in types
 
-    if msg_id:
-        hashed_id = hashlib.sha256(msg_id.encode("utf-8")).hexdigest()[:12]
-        action_id = f"#action-{hashed_id}"
-    else:
-        action_id = "#action"
+    action_id = _derive_action_id(msg_id)
     action_name = f"Execution of {msg_id}" if msg_id else "RCP Workflow Run Execution"
 
     objects: list[dict[str, str]] = []
@@ -392,7 +395,12 @@ def _verify_carrier_digests(
                 )
 
 
-def _validate_carried_doc(extracted_doc: dict[str, Any], carried_file_entry: dict[str, Any]) -> None:
+def _validate_carried_doc(
+    extracted_doc: dict[str, Any],
+    carried_file_entry: dict[str, Any],
+    action_entities: list[dict[str, Any]],
+    carried_file_id: str,
+) -> None:
     validate_message(extracted_doc)
 
     doc_types = root_types(extracted_doc)
@@ -409,4 +417,17 @@ def _validate_carried_doc(extracted_doc: dict[str, Any], carried_file_entry: dic
     if not about_id or about_id != doc_id:
         raise ValueError(
             f"Carried document identifier derivation mismatch: metadata about {about_id}, document @id {doc_id}"
+        )
+
+    # Verify that the CreateAction referencing this carried file has the deterministic action @id
+    expected_action_id = _derive_action_id(doc_id)
+    referencing_actions = [
+        action
+        for action in action_entities
+        if carried_file_id in _extract_action_file_refs([action])
+    ]
+    if not any(action.get("@id") == expected_action_id for action in referencing_actions):
+        actual_ids = [action.get("@id") for action in referencing_actions]
+        raise ValueError(
+            f"CreateAction identifier derivation mismatch: expected {expected_action_id}, found {actual_ids}"
         )

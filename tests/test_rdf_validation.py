@@ -261,6 +261,25 @@ def test_ro_crate_unpack_and_verify_tampered_rejected(repository_root, tmp_path,
         unpack_and_verify_crate(crate_dir)
 
 
+def test_ro_crate_unpack_and_verify_action_id_mismatch_rejected(repository_root, tmp_path):
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "action_id_mismatch_crate"
+    builder.build_crate(original_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    for entity in metadata["@graph"]:
+        if entity.get("@type") == "CreateAction":
+            entity["@id"] = "#arbitrary-action-id"
+        if entity.get("@id") == "./":
+            entity["mentions"] = [{"@id": "#arbitrary-action-id"}]
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="CreateAction identifier derivation mismatch"):
+        unpack_and_verify_crate(crate_dir)
+
+
 def test_ro_crate_unpack_and_verify_id_mismatch_rejected(repository_root, tmp_path):
     original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()
