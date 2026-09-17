@@ -82,6 +82,12 @@ def parser() -> argparse.ArgumentParser:
         type=Path,
         help="Target directory or .zip archive to automatically emit an RO-Crate carrier",
     )
+    to_completion.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Overwrite existing archive or directory target when creating a crate",
+    )
     to_completion.add_argument("--sql", action="store_true")
 
     to_stamp = commands.add_parser("to-stamp", help="Render a semantic validation report as a Wasteland stamp")
@@ -95,6 +101,12 @@ def parser() -> argparse.ArgumentParser:
     to_crate_cmd = commands.add_parser("to-crate", help="Package an RCP message into an RO-Crate carrier")
     to_crate_cmd.add_argument("document", type=Path)
     to_crate_cmd.add_argument("output", type=Path, help="Target directory or .zip archive path")
+    to_crate_cmd.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Overwrite existing archive or directory target",
+    )
 
     from_crate_cmd = commands.add_parser("from-crate", help="Recover and verify an RCP message from an RO-Crate")
     from_crate_cmd.add_argument("crate", type=Path, help="Source directory or .zip archive path")
@@ -189,10 +201,14 @@ def _ledger(arguments: argparse.Namespace) -> int:
             doc, completed_by=arguments.completed_by, hop_uri=arguments.hop_uri
         )
         if arguments.crate_out:
-            to_crate(raw_bytes, arguments.crate_out)
+            to_crate(raw_bytes, arguments.crate_out, overwrite=arguments.force)
         return _emit_row("completions", row, arguments.sql)
     if arguments.command == "to-crate":
-        out_path = to_crate(arguments.document.read_bytes(), arguments.output)
+        out_path = to_crate(
+            arguments.document.read_bytes(),
+            arguments.output,
+            overwrite=arguments.force,
+        )
         _print({"status": "created", "crate": str(out_path)})
         return 0
     if arguments.command == "from-crate":

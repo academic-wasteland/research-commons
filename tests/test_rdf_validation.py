@@ -954,5 +954,96 @@ def test_ro_crate_to_completion_automatic_crate_emission(repository_root, tmp_pa
     assert unpacked["@id"] == "urn:uuid:757d2882-b533-4fc2-9bd1-8c6b21227284"
 
 
+def test_rdf_validation_pep562_dir_and_reexports():
+    import research_commons.rdf_validation as rdf_val
+
+    dir_names = dir(rdf_val)
+    assert "build_crate" in dir_names
+    assert "from_crate" in dir_names
+    assert "ROCrateBuilder" in dir_names
+    assert "to_crate" in dir_names
+    assert "unpack_and_verify_crate" in dir_names
+
+
+def test_ro_crate_unpack_crate_with_standard_root_action_id(repository_root, tmp_path):
+    """Test that a valid crate using '@id': '#action' (allowed by profile schema) recovers successfully."""
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "root_action_crate"
+    builder.build_crate(original_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    for entity in metadata["@graph"]:
+        if entity.get("@type") == "CreateAction":
+            entity["@id"] = "#action"
+
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    recovered = unpack_and_verify_crate(crate_dir)
+    assert recovered["@id"] == original_doc["@id"]
+
+
+def test_ro_crate_overwrite_flag_support(repository_root, tmp_path):
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+
+    # Zip target overwrite
+    zip_target = tmp_path / "overwrite_test.zip"
+    builder.build_crate(original_doc, zip_target)
+    # Refuses by default
+    with pytest.raises(ValueError, match="already exists; refusing to overwrite"):
+        builder.build_crate(original_doc, zip_target, overwrite=False)
+    # Succeeds with overwrite=True
+    builder.build_crate(original_doc, zip_target, overwrite=True)
+    assert zip_target.exists()
+
+    # Directory target overwrite
+    dir_target = tmp_path / "overwrite_dir"
+    builder.build_crate(original_doc, dir_target)
+    # Refuses by default when directory is non-empty
+    with pytest.raises(ValueError, match="is not empty; refusing to overwrite"):
+        builder.build_crate(original_doc, dir_target, overwrite=False)
+    # Succeeds with overwrite=True
+    builder.build_crate(original_doc, dir_target, overwrite=True)
+    assert (dir_target / ROCrateBuilder.METADATA_FILENAME).exists()
+
+
+def test_cli_force_overwrite(repository_root, tmp_path):
+    import subprocess
+    import sys
+
+    doc_path = repository_root / "examples/metagenomics/task.jsonld"
+    zip_out = tmp_path / "cli_force.zip"
+
+    # Initial creation
+    cmd1 = [
+        sys.executable,
+        "-m",
+        "research_commons.cli",
+        "to-crate",
+        str(doc_path),
+        str(zip_out),
+    ]
+    subprocess.run(cmd1, capture_output=True, text=True, check=True)
+
+    # Overwrite without --force fails
+    res_fail = subprocess.run(cmd1, capture_output=True, text=True, check=False)
+    assert res_fail.returncode != 0
+
+    # Overwrite with --force succeeds
+    cmd2 = [
+        sys.executable,
+        "-m",
+        "research_commons.cli",
+        "to-crate",
+        str(doc_path),
+        str(zip_out),
+        "--force",
+    ]
+    res_success = subprocess.run(cmd2, capture_output=True, text=True, check=True)
+    assert res_success.returncode == 0
+
+
+
 
 

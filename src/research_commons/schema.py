@@ -14,6 +14,8 @@ _FORMAT_CHECKER = FormatChecker()
 def _check_datetime(instance: Any) -> bool:
     if not isinstance(instance, str):
         return True
+    if "T" not in instance and "t" not in instance:
+        return False
     try:
         # ISO-8601 / RFC-3339 datetime
         datetime.fromisoformat(instance)

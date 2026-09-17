@@ -156,6 +156,47 @@ def test_ro_crate_profile_schema_enforces_required_entities(repository_root):
 
 
 def test_ro_crate_profile_schema_enforces_date_published_format(repository_root):
+    # Valid date and datetime formats pass
+    for good_date in ["2026-09-17", "2026-09-17T12:00:00Z", "2026-09-17T12:00:00+00:00"]:
+        valid_graph = [
+            {
+                "@id": "ro-crate-metadata.json",
+                "@type": "CreativeWork",
+                "conformsTo": [{"@id": "https://w3id.org/ro/crate/1.1"}],
+                "about": {"@id": "./"},
+            },
+            {
+                "@id": "./",
+                "@type": "Dataset",
+                "datePublished": good_date,
+                "conformsTo": [
+                    {"@id": "https://w3id.org/ro/crate/1.1"},
+                    {"@id": "https://w3id.org/research-commons/v0.1/ro-crate-rcp-profile.json"},
+                ],
+                "hasPart": [{"@id": "rcp-message.jsonld"}],
+            },
+            {
+                "@id": "rcp-message.jsonld",
+                "@type": "File",
+                "encodingFormat": "application/ld+json",
+                "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "about": {"@id": "https://example.org/task-1"},
+            },
+            {
+                "@id": "#action",
+                "@type": "CreateAction",
+                "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            },
+        ]
+        valid_crate = {
+            "@context": [
+                "https://w3id.org/ro/crate/1.1/context",
+                "https://w3id.org/research-commons/v0.1/context.jsonld",
+            ],
+            "@graph": valid_graph,
+        }
+        validate_against(valid_crate, "ro-crate-rcp-profile.json")
+
     # Invalid datePublished format fails (e.g. invalid string or impossible calendar date)
     for bad_date in ["not-a-valid-date", "2026-99-99T29:70:70Z", "2026-02-31"]:
         invalid_graph = [

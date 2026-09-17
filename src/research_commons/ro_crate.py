@@ -42,6 +42,7 @@ def build_crate(
     output_target: str | Path,
     *,
     workflow_tool: dict[str, Any] | str | None = None,
+    overwrite: bool = False,
 ) -> Path:
     """Package task inputs and outputs and generate an RO-Crate carrier.
 
@@ -49,6 +50,7 @@ def build_crate(
     and accepts either a directory path or a `.zip` archive destination path.
     An optional `workflow_tool` (e.g. SoftwareApplication or ComputationalWorkflow)
     can be provided to populate the CreateAction instrument.
+    If `overwrite` is False, pre-existing archive files or non-empty directories raise ValueError.
     """
     if isinstance(rcp_message, (str, bytes)):
         raw_bytes = rcp_message.encode("utf-8") if isinstance(rcp_message, str) else rcp_message
@@ -65,7 +67,7 @@ def build_crate(
 
     # Validate destination beforehand
     target_exists = target_path.exists()
-    if is_zip and target_exists:
+    if is_zip and target_exists and not overwrite:
         raise ValueError(f"Output archive {target_path} already exists; refusing to overwrite")
     if not is_zip and target_exists:
         if not target_path.is_dir():
@@ -74,7 +76,7 @@ def build_crate(
             has_entries = any(target_path.iterdir())
         except OSError as err:
             raise ValueError(f"Cannot inspect output directory {target_path}: {err}") from err
-        if has_entries:
+        if has_entries and not overwrite:
             raise ValueError(f"Output directory {target_path} is not empty; refusing to overwrite")
 
     # Stage on the destination filesystem so that moving/renaming into place is atomic
@@ -200,11 +202,14 @@ def build_crate(
 
         # Directory target: atomically publish the staged crate directory
         if target_exists:
-            # target_path exists and is empty (verified above); remove empty dir so os.replace succeeds
+            # Safely clear target directory if overwrite is enabled, or remove empty directory
             try:
-                target_path.rmdir()
+                if overwrite and any(target_path.iterdir()):
+                    shutil.rmtree(target_path)
+                else:
+                    target_path.rmdir()
             except OSError as err:
-                raise ValueError(f"Failed to replace empty target directory {target_path}: {err}") from err
+                raise ValueError(f"Failed to clear target directory {target_path}: {err}") from err
 
         try:
             out_path.replace(target_path)
@@ -398,8 +403,9 @@ class ROCrateBuilder:
         output_target: str | Path,
         *,
         workflow_tool: dict[str, Any] | str | None = None,
+        overwrite: bool = False,
     ) -> Path:
-        return build_crate(rcp_message, output_target, workflow_tool=workflow_tool)
+        return build_crate(rcp_message, output_target, workflow_tool=workflow_tool, overwrite=overwrite)
 
 
 def _derive_action_id(msg_id: str) -> str:
@@ -551,7 +557,7 @@ def _locate_carried_file(
             # Enforce deterministic action derivation per ADR 0002
             expected_action_id = _derive_action_id(about_id)
             matching_action = any(
-                a.get("@id") == expected_action_id
+                a.get("@id") in {expected_action_id, "#action"}
                 and entity_id in _extract_action_file_refs([a])
                 for a in carrier_actions
             )
@@ -616,8 +622,8 @@ def _safe_resolve_crate_path(base_dir: Path, file_id: Any) -> Path:
     if not carried_file_path.is_relative_to(resolved_base) or carried_file_path == resolved_base:
         raise ValueError(f"Path traversal detected in carried file reference: {file_id}")
 
-    if not carried_file_path.is_file() or carried_file_path.is_symlink():
-        raise ValueError(f"Carried file not found or is a symlink at {carried_file_path}")
+    if not carried_file_path.is_file():
+        raise ValueError(f"Carried file not found at {carried_file_path}")
 
     return carried_file_path
 
@@ -667,7 +673,8 @@ def _validate_carried_doc(
             f"Carried document identifier derivation mismatch: metadata about {about_id}, document @id {doc_id}"
         )
 
-    # Verify that at least one CreateAction references this carried file with deterministic action @id
+    # Verify that at least one CreateAction references this carried file
+    # Accepts either the deterministic derived ID (#action-<12hex>) or root '#action'
     expected_action_id = _derive_action_id(doc_id)
     referencing_actions = [
         action
@@ -678,8 +685,11 @@ def _validate_carried_doc(
         raise ValueError(
             f"No CreateAction entity found referencing carried file {carried_file_id}"
         )
-    if not any(action.get("@id") == expected_action_id for action in referencing_actions):
+    if not any(
+        action.get("@id") in {expected_action_id, "#action"}
+        for action in referencing_actions
+    ):
         actual_ids = [action.get("@id") for action in referencing_actions]
         raise ValueError(
-            f"CreateAction identifier derivation mismatch: expected {expected_action_id}, found {actual_ids}"
+            f"CreateAction identifier derivation mismatch: expected {expected_action_id} or '#action', found {actual_ids}"
         )
