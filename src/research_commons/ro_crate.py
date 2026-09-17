@@ -1,4 +1,4 @@
-"""Project RCP messages onto Workflow Run RO-Crates per ADR 0002.
+"""Project RCP messages onto RO-Crates per ADR 0002.
 
 Carries the complete, verbatim RCP JSON-LD document inside an RO-Crate and records
 its canonical SHA-256 digest in crate metadata. Recovery verifies crate structural
@@ -33,11 +33,18 @@ VALID_ROOT_TYPES = {
 }
 
 
-def build_crate(rcp_message: dict[str, Any] | str | bytes, output_target: str | Path) -> Path:
-    """Package task inputs and outputs and generate a Workflow Run RO-Crate.
+def build_crate(
+    rcp_message: dict[str, Any] | str | bytes,
+    output_target: str | Path,
+    *,
+    workflow_tool: dict[str, Any] | str | None = None,
+) -> Path:
+    """Package task inputs and outputs and generate an RO-Crate carrier.
 
     Accepts an RCP message as a dict or raw JSON string/bytes (preserving verbatim bytes),
     and accepts either a directory path or a `.zip` archive destination path.
+    An optional `workflow_tool` (e.g. SoftwareApplication or ComputationalWorkflow)
+    can be provided to populate the CreateAction instrument.
     """
     if isinstance(rcp_message, (str, bytes)):
         raw_bytes = rcp_message.encode("utf-8") if isinstance(rcp_message, str) else rcp_message
@@ -70,7 +77,9 @@ def build_crate(rcp_message: dict[str, Any] | str | bytes, output_target: str | 
         msg_id = message_doc.get("@id", "")
         types = root_types(message_doc)
 
-        action_id, action_entity = _assemble_action_entity(message_doc, msg_id, types, digest)
+        action_id, action_entity, instrument_entity = _assemble_action_entity(
+            message_doc, msg_id, types, digest, workflow_tool=workflow_tool
+        )
 
         graph: list[dict[str, Any]] = [
             {
@@ -121,6 +130,9 @@ def build_crate(rcp_message: dict[str, Any] | str | bytes, output_target: str | 
                     "name": agent_info.get("name", "Agent"),
                 }
             )
+
+        if instrument_entity is not None:
+            graph.append(instrument_entity)
 
         crate_metadata: dict[str, Any] = {
             "@context": [
@@ -348,8 +360,14 @@ class ROCrateBuilder:
     METADATA_FILENAME = METADATA_FILENAME
     PROFILE_ID = PROFILE_ID
 
-    def build_crate(self, rcp_message: dict[str, Any] | str | bytes, output_target: str | Path) -> Path:
-        return build_crate(rcp_message, output_target)
+    def build_crate(
+        self,
+        rcp_message: dict[str, Any] | str | bytes,
+        output_target: str | Path,
+        *,
+        workflow_tool: dict[str, Any] | str | None = None,
+    ) -> Path:
+        return build_crate(rcp_message, output_target, workflow_tool=workflow_tool)
 
 
 def _derive_action_id(msg_id: str) -> str:
@@ -360,13 +378,18 @@ def _derive_action_id(msg_id: str) -> str:
 
 
 def _assemble_action_entity(
-    rcp_message: dict[str, Any], msg_id: str, types: set[str], digest: str
-) -> tuple[str, dict[str, Any]]:
+    rcp_message: dict[str, Any],
+    msg_id: str,
+    types: set[str],
+    digest: str,
+    *,
+    workflow_tool: dict[str, Any] | str | None = None,
+) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
     is_contribution = "ResearchContribution" in types or f"{RCP}ResearchContribution" in types
     is_task = "ResearchTask" in types or f"{RCP}ResearchTask" in types
 
     action_id = _derive_action_id(msg_id)
-    action_name = f"Execution of {msg_id}" if msg_id else "RCP Workflow Run Execution"
+    action_name = f"Execution of {msg_id}" if msg_id else "RCP Carrier Execution"
 
     objects: list[dict[str, str]] = []
     results: list[dict[str, str]] = []
@@ -400,11 +423,22 @@ def _assemble_action_entity(
     if results:
         action_entity["result"] = results if len(results) > 1 else results[0]
 
+    instrument = workflow_tool or rcp_message.get("instrument")
+    if isinstance(instrument, dict) and instrument.get("@id"):
+        action_entity["instrument"] = {"@id": instrument["@id"]}
+    elif isinstance(instrument, str):
+        action_entity["instrument"] = {"@id": instrument}
+
     agent_info = rcp_message.get("producedBy") or rcp_message.get("requestedBy")
     if isinstance(agent_info, dict) and agent_info.get("@id"):
         action_entity["agent"] = {"@id": agent_info["@id"]}
 
-    return action_id, action_entity
+    # If instrument is a nested entity dictionary, return it so the caller can include it in the graph
+    instrument_entity = None
+    if isinstance(instrument, dict) and instrument.get("@id") and instrument.get("@type"):
+        instrument_entity = instrument
+
+    return action_id, action_entity, instrument_entity
 
 
 def _extract_action_file_refs(action_entities: list[dict[str, Any]]) -> set[str]:

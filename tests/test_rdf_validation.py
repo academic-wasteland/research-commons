@@ -101,6 +101,31 @@ def test_ro_crate_zip_archive_missing_carried_file_rejected(repository_root, tmp
         unpack_and_verify_crate(zip_path)
 
 
+def test_ro_crate_builder_with_instrument_entity(repository_root, tmp_path):
+    task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    workflow_tool = {
+        "@id": "https://example.org/software/predictor",
+        "@type": "SoftwareApplication",
+        "name": "Predictor Tool",
+    }
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "instrument_crate"
+    builder.build_crate(task_doc, crate_dir, workflow_tool=workflow_tool)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+
+    # Verify instrument is referenced in CreateAction and included in @graph
+    action = next(e for e in metadata["@graph"] if e.get("@type") == "CreateAction")
+    assert action.get("instrument") == {"@id": "https://example.org/software/predictor"}
+
+    tool = next(e for e in metadata["@graph"] if e.get("@id") == "https://example.org/software/predictor")
+    assert tool.get("@type") == "SoftwareApplication"
+
+    recovered = unpack_and_verify_crate(crate_dir)
+    assert recovered["@id"] == task_doc["@id"]
+
+
 def test_ro_crate_graph_wfrun_context_allowed(repository_root, tmp_path):
     task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()

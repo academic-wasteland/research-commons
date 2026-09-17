@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://w3id.org/research-commons/v0.1/ro-crate-rcp-profile.json",
-  "title": "RCP Workflow Run RO-Crate Profile",
-  "description": "Profile definition for carrying Research Commons Protocol (RCP) messages inside Workflow Run RO-Crates per ADR 0002.",
+  "title": "RCP RO-Crate Carrier Profile",
+  "description": "Profile definition for carrying Research Commons Protocol (RCP) messages inside RO-Crates per ADR 0002.",
   "type": "object",
   "required": ["@context", "@graph"],
   "properties": {
