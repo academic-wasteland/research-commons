@@ -10,6 +10,7 @@ import json
 import shutil
 import tempfile
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +82,7 @@ def build_crate(rcp_message: dict[str, Any] | str | bytes, output_target: str | 
             {
                 "@id": "./",
                 "@type": "Dataset",
+                "datePublished": datetime.now(UTC).isoformat(),
                 "conformsTo": [
                     {"@id": "https://w3id.org/ro/crate/1.1"},
                     {"@id": PROFILE_ID},
@@ -169,6 +171,8 @@ def unpack_and_verify_crate(
     is_zip = source_path.is_file() and (source_path.suffix.lower() == ".zip" or zipfile.is_zipfile(source_path))
 
     if is_zip:
+        if not zipfile.is_zipfile(source_path):
+            raise ValueError(f"File {source_path} has .zip extension but is not a valid zip archive")
         temp_dir = Path(tempfile.mkdtemp(prefix="ro_crate_extract_"))
         resolved_temp = temp_dir.resolve()
         try:

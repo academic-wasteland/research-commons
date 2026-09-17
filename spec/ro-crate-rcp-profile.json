@@ -8,6 +8,23 @@
   "properties": {
     "@context": {
       "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "https://w3id.org/ro/crate/1.1/context",
+              "https://w3id.org/research-commons/v0.1/context.jsonld",
+              "https://w3id.org/ro/wfrun/process/0.1/context",
+              "https://w3id.org/ro/wfrun/workflow/0.1/context",
+              "https://w3id.org/ro/wfrun/provenance/0.1/context"
+            ]
+          },
+          {
+            "type": "object"
+          }
+        ]
+      },
       "allOf": [
         {
           "contains": {
@@ -125,7 +142,7 @@
     },
     "rootDataEntity": {
       "type": "object",
-      "required": ["@id", "@type", "hasPart", "conformsTo"],
+      "required": ["@id", "@type", "hasPart", "conformsTo", "datePublished"],
       "properties": {
         "@id": {"const": "./"},
         "@type": {
@@ -133,6 +150,10 @@
             {"const": "Dataset"},
             {"type": "array", "contains": {"const": "Dataset"}}
           ]
+        },
+        "datePublished": {
+          "description": "Publication date in ISO-8601 format",
+          "type": "string"
         },
         "conformsTo": {
           "description": "Reference to RO-Crate profile URIs",

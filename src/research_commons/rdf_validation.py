@@ -8,7 +8,7 @@ from typing import Any
 from pyshacl import validate
 from rdflib import Graph
 
-from .constants import RO_CRATE_BASE_CONTEXT, SPEC_ROOT
+from .constants import RO_CRATE_BASE_CONTEXT, SPEC_ROOT, WFRUN_PROCESS_CONTEXT
 from .schema import load_json
 
 
@@ -54,6 +54,9 @@ def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
     expected_iris = {
         "https://w3id.org/ro/crate/1.1/context",
         "https://w3id.org/research-commons/v0.1/context.jsonld",
+        "https://w3id.org/ro/wfrun/process/0.1/context",
+        "https://w3id.org/ro/wfrun/workflow/0.1/context",
+        "https://w3id.org/ro/wfrun/provenance/0.1/context",
     }
     for ctx in declared_context:
         if isinstance(ctx, str):
@@ -75,11 +78,21 @@ def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
     # Replace each approved remote context with its local copy in place,
     # preserving exact declaration order and inline contexts.
     resolved_context: list[Any] = []
+    wfrun_contexts = {
+        "https://w3id.org/ro/wfrun/process/0.1/context",
+        "https://w3id.org/ro/wfrun/workflow/0.1/context",
+        "https://w3id.org/ro/wfrun/provenance/0.1/context",
+    }
     for ctx in declared_context:
-        if ctx == "https://w3id.org/ro/crate/1.1/context":
-            resolved_context.append(RO_CRATE_BASE_CONTEXT)
-        elif ctx == "https://w3id.org/research-commons/v0.1/context.jsonld":
-            resolved_context.append(local_rcp_context)
+        if isinstance(ctx, str):
+            if ctx == "https://w3id.org/ro/crate/1.1/context":
+                resolved_context.append(RO_CRATE_BASE_CONTEXT)
+            elif ctx == "https://w3id.org/research-commons/v0.1/context.jsonld":
+                resolved_context.append(local_rcp_context)
+            elif ctx in wfrun_contexts:
+                resolved_context.append(WFRUN_PROCESS_CONTEXT)
+            else:
+                resolved_context.append(ctx)
         else:
             resolved_context.append(ctx)
 

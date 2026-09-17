@@ -74,6 +74,7 @@ def test_ro_crate_profile_schema_enforces_metadata_descriptor_conforms_to(reposi
         {
             "@id": "./",
             "@type": "Dataset",
+            "datePublished": "2026-09-17T00:00:00Z",
             "conformsTo": [
                 {"@id": "https://w3id.org/ro/crate/1.1"},
                 {"@id": "https://w3id.org/research-commons/v0.1/ro-crate-rcp-profile.json"},
@@ -110,6 +111,7 @@ def test_ro_crate_profile_schema_enforces_metadata_descriptor(repository_root):
         {
             "@id": "./",
             "@type": "Dataset",
+            "datePublished": "2026-09-17T00:00:00Z",
             "conformsTo": [
                 {"@id": "https://w3id.org/ro/crate/1.1"},
                 {"@id": "https://w3id.org/research-commons/v0.1/ro-crate-rcp-profile.json"},
@@ -165,6 +167,7 @@ def test_ro_crate_profile_schema_enforces_required_context_iris(repository_root)
         {
             "@id": "./",
             "@type": "Dataset",
+            "datePublished": "2026-09-17T00:00:00Z",
             "conformsTo": [
                 {"@id": "https://w3id.org/ro/crate/1.1"},
                 {"@id": "https://w3id.org/research-commons/v0.1/ro-crate-rcp-profile.json"},

@@ -58,8 +58,16 @@ RO_CRATE_BASE_CONTEXT = {
     "conformsTo": {"@id": "http://purl.org/dc/terms/conformsTo", "@type": "@id"},
     "name": "http://schema.org/name",
     "description": "http://schema.org/description",
+    "datePublished": "http://schema.org/datePublished",
     "encodingFormat": "http://schema.org/encodingFormat",
     "object": {"@id": "http://schema.org/object", "@type": "@id"},
     "result": {"@id": "http://schema.org/result", "@type": "@id"},
+}
+
+WFRUN_PROCESS_CONTEXT = {
+    "@version": 1.1,
+    "ProcessRun": "https://w3id.org/ro/wfrun/process/0.1#ProcessRun",
+    "WorkflowRun": "https://w3id.org/ro/wfrun/workflow/0.1#WorkflowRun",
+    "ComputationalWorkflow": "https://bioschemas.org/ComputationalWorkflow",
 }
 

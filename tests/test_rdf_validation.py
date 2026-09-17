@@ -78,6 +78,14 @@ def test_shacl_requires_explicit_producer(repository_root):
     assert not result.conforms
 
 
+def test_ro_crate_zip_archive_bad_zip_signature_rejected(tmp_path):
+    bad_zip = tmp_path / "corrupt.zip"
+    bad_zip.write_text("not a real zip file", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not a valid zip archive"):
+        unpack_and_verify_crate(bad_zip)
+
+
 def test_ro_crate_zip_archive_missing_carried_file_rejected(repository_root, tmp_path):
     task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()
@@ -91,6 +99,20 @@ def test_ro_crate_zip_archive_missing_carried_file_rejected(repository_root, tmp
 
     with pytest.raises(ValueError, match="not found in zip archive"):
         unpack_and_verify_crate(zip_path)
+
+
+def test_ro_crate_graph_wfrun_context_allowed(repository_root, tmp_path):
+    task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "wfrun_crate"
+    builder.build_crate(task_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["@context"].append("https://w3id.org/ro/wfrun/process/0.1/context")
+
+    graph = ro_crate_graph(metadata)
+    assert graph is not None
 
 
 def test_ro_crate_graph_nested_or_non_string_context_rejected(repository_root, tmp_path):
