@@ -7,10 +7,18 @@
   "required": ["@context", "@graph"],
   "properties": {
     "@context": {
-      "oneOf": [
-        {"type": "string"},
-        {"type": "array"},
-        {"type": "object"}
+      "type": "array",
+      "allOf": [
+        {
+          "contains": {
+            "const": "https://w3id.org/ro/crate/1.1/context"
+          }
+        },
+        {
+          "contains": {
+            "const": "https://w3id.org/research-commons/v0.1/context.jsonld"
+          }
+        }
       ]
     },
     "@graph": {
