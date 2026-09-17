@@ -149,7 +149,16 @@ def build_crate(rcp_message: dict[str, Any] | str | bytes, output_target: str | 
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def unpack_and_verify_crate(crate_source: str | Path) -> dict[str, Any]:
+MAX_ZIP_MEMBERS = 1000
+MAX_ZIP_UNCOMPRESSED_BYTES = 100 * 1024 * 1024  # 100 MiB
+
+
+def unpack_and_verify_crate(
+    crate_source: str | Path,
+    *,
+    max_members: int = MAX_ZIP_MEMBERS,
+    max_uncompressed_bytes: int = MAX_ZIP_UNCOMPRESSED_BYTES,
+) -> dict[str, Any]:
     """Recover and re-validate the carried RCP JSON-LD document from an RO-Crate directory or ZIP."""
     source_path = Path(crate_source)
     is_zip = source_path.is_file() and (source_path.suffix.lower() == ".zip" or zipfile.is_zipfile(source_path))
@@ -159,8 +168,18 @@ def unpack_and_verify_crate(crate_source: str | Path) -> dict[str, Any]:
         resolved_temp = temp_dir.resolve()
         try:
             with zipfile.ZipFile(source_path, "r") as zf:
-                # Platform-independent safe extraction preventing Zip Slip traversal
-                for member in zf.infolist():
+                infolist = zf.infolist()
+                if len(infolist) > max_members:
+                    raise ValueError(f"Zip archive contains too many members ({len(infolist)} > {max_members})")
+
+                total_uncompressed_size = 0
+                for member in infolist:
+                    total_uncompressed_size += member.file_size
+                    if total_uncompressed_size > max_uncompressed_bytes:
+                        raise ValueError(
+                            f"Zip archive uncompressed size exceeds limit ({total_uncompressed_size} > {max_uncompressed_bytes})"
+                        )
+
                     name = member.filename
                     # Reject absolute paths, drives, UNC, or backslashes
                     if "\\" in name or name.startswith("/") or ":" in name:
@@ -173,7 +192,57 @@ def unpack_and_verify_crate(crate_source: str | Path) -> dict[str, Any]:
                     target_file = (resolved_temp / Path(*parts)).resolve()
                     if not target_file.is_relative_to(resolved_temp):
                         raise ValueError(f"Insecure zip archive member: {name}")
-                zf.extractall(temp_dir)
+
+                # First read and validate metadata directly from archive before extraction
+                if METADATA_FILENAME not in zf.namelist():
+                    raise ValueError(f"Missing {METADATA_FILENAME} in zip archive")
+
+                try:
+                    raw_metadata = zf.read(METADATA_FILENAME).decode("utf-8")
+                    metadata = json.loads(raw_metadata)
+                except Exception as err:
+                    raise ValueError(f"Failed to load RO-Crate metadata from archive: {err}") from err
+
+                validate_against(metadata, PROFILE_SCHEMA)
+                from .rdf_validation import validate_crate_shacl
+
+                shacl_res = validate_crate_shacl(metadata)
+                if not shacl_res.conforms:
+                    raise ValueError(f"RO-Crate metadata failed SHACL shape validation: {shacl_res.report}")
+
+                # Locate carried file entity from metadata
+                graph = metadata.get("@graph")
+                if not isinstance(graph, list):
+                    raise TypeError("RO-Crate metadata has no @graph list")
+                entities_by_id = {entity.get("@id"): entity for entity in graph if isinstance(entity, dict)}
+                action_entities = [
+                    entity
+                    for entity in graph
+                    if isinstance(entity, dict)
+                    and any(
+                        t in ("CreateAction", "http://schema.org/CreateAction")
+                        for t in ([entity.get("@type")] if isinstance(entity.get("@type"), str) else entity.get("@type", []))
+                    )
+                ]
+                if not action_entities:
+                    raise ValueError("RO-Crate metadata does not contain a CreateAction entity")
+                action_file_refs = _extract_action_file_refs(action_entities)
+                carried_file_entry = _locate_carried_file(graph, entities_by_id, action_file_refs)
+
+                file_id = carried_file_entry.get("@id")
+                if not file_id or not isinstance(file_id, str):
+                    raise ValueError("Carried file entry has missing or invalid @id")
+                if "\\" in file_id or file_id.startswith("/") or "://" in file_id or ":" in file_id:
+                    raise ValueError(f"Path traversal or insecure path detected in carried file reference: {file_id}")
+                file_parts = [p for p in file_id.replace("\\", "/").split("/") if p]
+                if ".." in file_parts:
+                    raise ValueError(f"Path traversal detected in carried file reference: {file_id}")
+                normalized_file_name = "/".join(file_parts)
+
+                # Extract only metadata and the carried file
+                zf.extract(METADATA_FILENAME, temp_dir)
+                zf.extract(normalized_file_name, temp_dir)
+
             return _unpack_and_verify_directory(temp_dir)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)

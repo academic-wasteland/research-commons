@@ -174,6 +174,27 @@ def test_ro_crate_zip_archive_path_traversal_rejected(tmp_path, malicious_member
         unpack_and_verify_crate(zip_path)
 
 
+def test_ro_crate_zip_archive_member_limit_rejected(tmp_path):
+    zip_path = tmp_path / "too_many_members.crate.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for i in range(15):
+            zf.writestr(f"file_{i}.txt", "content")
+        zf.writestr("ro-crate-metadata.json", "{}")
+
+    with pytest.raises(ValueError, match="too many members"):
+        unpack_and_verify_crate(zip_path, max_members=10)
+
+
+def test_ro_crate_zip_archive_size_limit_rejected(tmp_path):
+    zip_path = tmp_path / "too_large.crate.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("large.txt", "A" * 5000)
+        zf.writestr("ro-crate-metadata.json", "{}")
+
+    with pytest.raises(ValueError, match="uncompressed size exceeds limit"):
+        unpack_and_verify_crate(zip_path, max_uncompressed_bytes=1000)
+
+
 
 def test_ro_crate_carrier_shacl_rejection(repository_root, tmp_path):
     task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
