@@ -5,6 +5,7 @@ its canonical SHA-256 digest in crate metadata. Recovery verifies crate structur
 conformance, carrier SHACL constraints, digest integrity, and message semantics.
 """
 
+import hashlib
 import json
 import shutil
 import tempfile
@@ -31,13 +32,22 @@ VALID_ROOT_TYPES = {
 }
 
 
-def build_crate(rcp_message: dict[str, Any], output_target: str | Path) -> Path:
+def build_crate(rcp_message: dict[str, Any] | str | bytes, output_target: str | Path) -> Path:
     """Package task inputs and outputs and generate a Workflow Run RO-Crate.
 
-    Accepts either a directory path or a `.zip` archive destination path.
-    If a `.zip` path is provided, creates a valid RO-Crate ZIP archive.
+    Accepts an RCP message as a dict or raw JSON string/bytes (preserving verbatim bytes),
+    and accepts either a directory path or a `.zip` archive destination path.
     """
-    validate_message(rcp_message)
+    if isinstance(rcp_message, (str, bytes)):
+        raw_bytes = rcp_message.encode("utf-8") if isinstance(rcp_message, str) else rcp_message
+        message_doc = json.loads(raw_bytes.decode("utf-8"))
+        if not isinstance(message_doc, dict):
+            raise TypeError("RCP message must parse to a JSON-LD object")
+    else:
+        message_doc = rcp_message
+        raw_bytes = canonical_json(message_doc).encode("utf-8")
+
+    validate_message(message_doc)
     target_path = Path(output_target)
     is_zip = target_path.suffix.lower() == ".zip"
 
@@ -50,14 +60,13 @@ def build_crate(rcp_message: dict[str, Any], output_target: str | Path) -> Path:
 
     try:
         message_file = out_path / MESSAGE_FILENAME
-        message_bytes = canonical_json(rcp_message).encode("utf-8")
-        message_file.write_bytes(message_bytes)
+        message_file.write_bytes(raw_bytes)
 
-        digest = document_digest(rcp_message)
-        msg_id = rcp_message.get("@id", "")
-        types = root_types(rcp_message)
+        digest = document_digest(message_doc)
+        msg_id = message_doc.get("@id", "")
+        types = root_types(message_doc)
 
-        action_id, action_entity = _assemble_action_entity(rcp_message, msg_id, types, digest)
+        action_id, action_entity = _assemble_action_entity(message_doc, msg_id, types, digest)
 
         graph: list[dict[str, Any]] = [
             {
@@ -91,7 +100,7 @@ def build_crate(rcp_message: dict[str, Any], output_target: str | Path) -> Path:
             action_entity,
         ]
 
-        agent_info = rcp_message.get("producedBy") or rcp_message.get("requestedBy")
+        agent_info = message_doc.get("producedBy") or message_doc.get("requestedBy")
         if isinstance(agent_info, dict) and agent_info.get("@id"):
             raw_type = agent_info.get("@type")
             if isinstance(raw_type, list):
@@ -226,7 +235,7 @@ def _unpack_and_verify_directory(path: Path) -> dict[str, Any]:
         raise TypeError("Carried JSON-LD file is not a valid JSON object")
 
     calculated_digest = document_digest(extracted_doc)
-    _verify_carrier_digests(calculated_digest, declared_digest, action_entities)
+    _verify_carrier_digests(calculated_digest, declared_digest, action_entities, file_id)
     _validate_carried_doc(extracted_doc, carried_file_entry)
 
     return extracted_doc
@@ -243,7 +252,7 @@ class ROCrateBuilder:
     METADATA_FILENAME = METADATA_FILENAME
     PROFILE_ID = PROFILE_ID
 
-    def build_crate(self, rcp_message: dict[str, Any], output_target: str | Path) -> Path:
+    def build_crate(self, rcp_message: dict[str, Any] | str | bytes, output_target: str | Path) -> Path:
         return build_crate(rcp_message, output_target)
 
 
@@ -253,7 +262,11 @@ def _assemble_action_entity(
     is_contribution = "ResearchContribution" in types or f"{RCP}ResearchContribution" in types
     is_task = "ResearchTask" in types or f"{RCP}ResearchTask" in types
 
-    action_id = f"#action-{msg_id.split(':')[-1]}" if msg_id else "#action"
+    if msg_id:
+        hashed_id = hashlib.sha256(msg_id.encode("utf-8")).hexdigest()[:12]
+        action_id = f"#action-{hashed_id}"
+    else:
+        action_id = "#action"
     action_name = f"Execution of {msg_id}" if msg_id else "RCP Workflow Run Execution"
 
     objects: list[dict[str, str]] = []
@@ -358,18 +371,24 @@ def _safe_resolve_crate_path(base_dir: Path, file_id: Any) -> Path:
 
 
 def _verify_carrier_digests(
-    calculated_digest: str, declared_digest: str, action_entities: list[dict[str, Any]]
+    calculated_digest: str,
+    declared_digest: str,
+    action_entities: list[dict[str, Any]],
+    carried_file_id: str,
 ) -> None:
     if calculated_digest != declared_digest:
         raise ValueError(
             f"Carried JSON-LD digest mismatch: declared {declared_digest}, calculated {calculated_digest}"
         )
     for action in action_entities:
-        action_digest = action.get("digest")
-        if action_digest and action_digest != calculated_digest:
-            raise ValueError(
-                f"CreateAction digest mismatch: action declared {action_digest}, calculated {calculated_digest}"
-            )
+        # Only verify digest on actions that actually reference the carried file
+        action_file_refs = _extract_action_file_refs([action])
+        if carried_file_id in action_file_refs:
+            action_digest = action.get("digest")
+            if action_digest and action_digest != calculated_digest:
+                raise ValueError(
+                    f"CreateAction digest mismatch: action declared {action_digest}, calculated {calculated_digest}"
+                )
 
 
 def _validate_carried_doc(extracted_doc: dict[str, Any], carried_file_entry: dict[str, Any]) -> None:

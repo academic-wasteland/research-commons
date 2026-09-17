@@ -41,6 +41,16 @@ rcp:RootDataEntityShape a sh:NodeShape ;
     sh:qualifiedValueShape [
       sh:nodeKind sh:IRI ;
       sh:property [
+        sh:path schema:encodingFormat ;
+        sh:hasValue "application/ld+json" ;
+        sh:minCount 1 ;
+      ] ;
+      sh:property [
+        sh:path rcp:digest ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+      ] ;
+      sh:property [
         sh:path [ sh:inversePath [ sh:alternativePath ( schema:object schema:result ) ] ] ;
         sh:class schema:CreateAction ;
         sh:minCount 1 ;

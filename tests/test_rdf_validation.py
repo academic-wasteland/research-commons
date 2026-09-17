@@ -85,6 +85,39 @@ def test_ro_crate_functional_api_roundtrip(repository_root, tmp_path):
     assert recovered == task_doc
 
 
+def test_ro_crate_verbatim_bytes_preserved(repository_root, tmp_path):
+    # Test that raw bytes with custom formatting/whitespace are bit-for-bit preserved
+    task_file = repository_root / "examples/metagenomics/task.jsonld"
+    original_bytes = task_file.read_bytes()
+    crate_dir = tmp_path / "verbatim_crate"
+    to_crate(original_bytes, crate_dir)
+
+    stored_file = crate_dir / ROCrateBuilder.MESSAGE_FILENAME
+    assert stored_file.read_bytes() == original_bytes
+
+
+def test_ro_crate_multi_action_unrelated_action_ignored(repository_root, tmp_path):
+    task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    crate_dir = tmp_path / "multi_action_crate"
+    to_crate(task_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+
+    # Add an unrelated CreateAction for another artifact with its own digest
+    metadata["@graph"].append({
+        "@id": "#unrelated-action",
+        "@type": "CreateAction",
+        "name": "Unrelated action",
+        "object": {"@id": "some-input.txt"},
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    })
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    recovered = from_crate(crate_dir)
+    assert recovered == task_doc
+
+
 def test_ro_crate_zip_archive_roundtrip(repository_root, tmp_path):
     task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     zip_path = tmp_path / "bundle.crate.zip"
