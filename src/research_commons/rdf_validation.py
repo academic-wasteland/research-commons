@@ -137,13 +137,25 @@ def validate_crate_shacl(metadata: dict[str, Any]) -> ShaclResult:
 
 
 # Backwards compatibility re-exports for RO-Crate carrier functions
-from .ro_crate import (
-    ROCrateBuilder,
-    build_crate,
-    from_crate,
-    to_crate,
-    unpack_and_verify_crate,
-)
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .ro_crate import (
+        ROCrateBuilder,
+        build_crate,
+        from_crate,
+        to_crate,
+        unpack_and_verify_crate,
+    )
+
+
+def __getattr__(name: str) -> Any:
+    if name in {"ROCrateBuilder", "build_crate", "from_crate", "to_crate", "unpack_and_verify_crate"}:
+        from . import ro_crate
+
+        return getattr(ro_crate, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "ROCrateBuilder",

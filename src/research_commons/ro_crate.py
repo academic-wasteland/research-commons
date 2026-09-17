@@ -17,6 +17,7 @@ from typing import Any
 
 from .constants import RCP
 from .ledger import canonical_json, document_digest, root_types
+from .rdf_validation import validate_crate_shacl
 from .schema import load_json, validate_against, validate_message
 
 MESSAGE_FILENAME = "rcp-message.jsonld"
@@ -64,6 +65,8 @@ def build_crate(
 
     # Validate destination beforehand
     target_exists = target_path.exists()
+    if is_zip and target_exists:
+        raise ValueError(f"Output archive {target_path} already exists; refusing to overwrite")
     if not is_zip and target_exists:
         if not target_path.is_dir():
             raise ValueError(f"Output target {target_path} exists and is not a directory")
@@ -166,8 +169,6 @@ def build_crate(
         }
 
         validate_against(crate_metadata, PROFILE_SCHEMA)
-        from .rdf_validation import validate_crate_shacl
-
         shacl_res = validate_crate_shacl(crate_metadata)
         if not shacl_res.conforms:
             raise ValueError(f"Assembled RO-Crate metadata failed SHACL shape validation: {shacl_res.report}")
@@ -272,8 +273,6 @@ def unpack_and_verify_crate(
                     raise ValueError(f"Failed to load RO-Crate metadata from archive: {err}") from err
 
                 validate_against(metadata, PROFILE_SCHEMA)
-                from .rdf_validation import validate_crate_shacl
-
                 shacl_res = validate_crate_shacl(metadata)
                 if not shacl_res.conforms:
                     raise ValueError(f"RO-Crate metadata failed SHACL shape validation: {shacl_res.report}")
@@ -337,8 +336,6 @@ def _unpack_and_verify_directory(path: Path) -> dict[str, Any]:
 
     # Validate profile schema and carrier SHACL shapes
     validate_against(metadata, PROFILE_SCHEMA)
-    from .rdf_validation import validate_crate_shacl
-
     shacl_res = validate_crate_shacl(metadata)
     if not shacl_res.conforms:
         raise ValueError(f"RO-Crate metadata failed SHACL shape validation: {shacl_res.report}")
@@ -611,12 +608,16 @@ def _safe_resolve_crate_path(base_dir: Path, file_id: Any) -> Path:
         raise ValueError(f"Path traversal detected in carried file reference: {file_id}")
 
     resolved_base = base_dir.resolve()
-    carried_file_path = (resolved_base / Path(*parts)).resolve()
+    unresolved_carried = resolved_base / Path(*parts)
+    if unresolved_carried.is_symlink():
+        raise ValueError(f"Carried file must be a regular file, not a symlink: {file_id}")
+
+    carried_file_path = unresolved_carried.resolve()
     if not carried_file_path.is_relative_to(resolved_base) or carried_file_path == resolved_base:
         raise ValueError(f"Path traversal detected in carried file reference: {file_id}")
 
-    if not carried_file_path.is_file():
-        raise ValueError(f"Carried file not found at {carried_file_path}")
+    if not carried_file_path.is_file() or carried_file_path.is_symlink():
+        raise ValueError(f"Carried file not found or is a symlink at {carried_file_path}")
 
     return carried_file_path
 

@@ -520,6 +520,32 @@ def test_ro_crate_unpack_and_verify_no_referencing_action_rejected(repository_ro
         unpack_and_verify_crate(crate_dir)
 
 
+def test_ro_crate_unpack_and_verify_symlink_payload_rejected(repository_root, tmp_path):
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "symlink_payload_crate"
+    builder.build_crate(original_doc, crate_dir)
+
+    payload_path = crate_dir / ROCrateBuilder.MESSAGE_FILENAME
+    target_payload = tmp_path / "actual_payload.jsonld"
+    target_payload.write_text(payload_path.read_text(encoding="utf-8"), encoding="utf-8")
+    payload_path.unlink()
+    payload_path.symlink_to(target_payload)
+
+    with pytest.raises(ValueError, match="(must be a regular file, not a symlink|Path traversal detected)"):
+        unpack_and_verify_crate(crate_dir)
+
+
+def test_ro_crate_build_refuses_to_overwrite_existing_zip(repository_root, tmp_path):
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    zip_path = tmp_path / "existing.zip"
+    zip_path.write_bytes(b"PK00dummy")
+
+    with pytest.raises(ValueError, match="already exists; refusing to overwrite"):
+        builder.build_crate(original_doc, zip_path)
+
+
 def test_ro_crate_unpack_and_verify_symlink_metadata_rejected(repository_root, tmp_path):
     original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()

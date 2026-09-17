@@ -77,7 +77,11 @@ def parser() -> argparse.ArgumentParser:
     to_completion.add_argument("document", type=Path)
     to_completion.add_argument("--completed-by", required=True, help="Wasteland rig handle of the contributor")
     to_completion.add_argument("--hop-uri")
-    to_completion.add_argument("--crate-out", type=Path, help="Target directory or .zip archive to automatically emit Workflow Run RO-Crate")
+    to_completion.add_argument(
+        "--crate-out",
+        type=Path,
+        help="Target directory or .zip archive to automatically emit an RO-Crate carrier",
+    )
     to_completion.add_argument("--sql", action="store_true")
 
     to_stamp = commands.add_parser("to-stamp", help="Render a semantic validation report as a Wasteland stamp")

@@ -1,10 +1,36 @@
 import json
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
 
 from .constants import SPEC_ROOT
+
+_FORMAT_CHECKER = FormatChecker()
+
+
+@_FORMAT_CHECKER.checks("date-time")
+def _check_datetime(instance: Any) -> bool:
+    if not isinstance(instance, str):
+        return True
+    try:
+        # ISO-8601 / RFC-3339 datetime
+        datetime.fromisoformat(instance)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+@_FORMAT_CHECKER.checks("date")
+def _check_date(instance: Any) -> bool:
+    if not isinstance(instance, str):
+        return True
+    try:
+        date.fromisoformat(instance)
+        return True
+    except (ValueError, TypeError):
+        return False
 
 
 class StructuralValidationError(ValueError):
@@ -21,7 +47,7 @@ def load_json(path: Path) -> dict[str, Any]:
 
 def validate_against(document: dict[str, Any], schema_name: str) -> None:
     schema = load_json(SPEC_ROOT / schema_name)
-    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    validator = Draft202012Validator(schema, format_checker=_FORMAT_CHECKER)
     errors = sorted(validator.iter_errors(document), key=lambda error: list(error.path))
     if errors:
         details = "; ".join(_format_error(error) for error in errors)
