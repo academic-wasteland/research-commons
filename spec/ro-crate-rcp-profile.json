@@ -42,7 +42,16 @@
       ],
       "items": {
         "type": "object",
-        "required": ["@id", "@type"]
+        "required": ["@id", "@type"],
+        "properties": {
+          "@id": {"type": "string"},
+          "@type": {
+            "oneOf": [
+              {"type": "string"},
+              {"type": "array", "items": {"type": "string"}}
+            ]
+          }
+        }
       }
     }
   },
@@ -115,7 +124,7 @@
     },
     "carriedFile": {
       "type": "object",
-      "required": ["@id", "@type", "encodingFormat", "digest"],
+      "required": ["@id", "@type", "encodingFormat", "digest", "about"],
       "properties": {
         "@id": {"type": "string"},
         "@type": {
@@ -129,6 +138,19 @@
           "type": "string",
           "pattern": "^sha256:[0-9a-f]{64}$",
           "description": "Canonical SHA-256 digest of the carried JSON-LD message"
+        },
+        "about": {
+          "oneOf": [
+            {"type": "string"},
+            {
+              "type": "object",
+              "required": ["@id"],
+              "properties": {
+                "@id": {"type": "string"}
+              }
+            }
+          ],
+          "description": "Subject reference to the carried RCP document @id"
         }
       }
     }

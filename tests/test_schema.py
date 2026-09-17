@@ -89,6 +89,7 @@ def test_ro_crate_profile_schema_enforces_required_context_iris(repository_root)
             "@type": "File",
             "encodingFormat": "application/ld+json",
             "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "about": {"@id": "https://example.org/task-1"},
         },
         {
             "@id": "#action",

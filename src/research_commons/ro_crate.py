@@ -214,7 +214,6 @@ def unpack_and_verify_crate(
                 graph = metadata.get("@graph")
                 if not isinstance(graph, list):
                     raise TypeError("RO-Crate metadata has no @graph list")
-                entities_by_id = {entity.get("@id"): entity for entity in graph if isinstance(entity, dict)}
                 action_entities = [
                     entity
                     for entity in graph
@@ -227,7 +226,7 @@ def unpack_and_verify_crate(
                 if not action_entities:
                     raise ValueError("RO-Crate metadata does not contain a CreateAction entity")
                 action_file_refs = _extract_action_file_refs(action_entities)
-                carried_file_entry = _locate_carried_file(graph, entities_by_id, action_file_refs)
+                carried_file_entry = _locate_carried_file(graph, action_file_refs)
 
                 file_id = carried_file_entry.get("@id")
                 if not file_id or not isinstance(file_id, str):
@@ -272,7 +271,6 @@ def _unpack_and_verify_directory(path: Path) -> dict[str, Any]:
     if not isinstance(graph, list):
         raise TypeError("RO-Crate metadata has no @graph list")
 
-    entities_by_id = {entity.get("@id"): entity for entity in graph if isinstance(entity, dict)}
     action_entities = [
         entity
         for entity in graph
@@ -286,7 +284,7 @@ def _unpack_and_verify_directory(path: Path) -> dict[str, Any]:
         raise ValueError("RO-Crate metadata does not contain a CreateAction entity")
 
     action_file_refs = _extract_action_file_refs(action_entities)
-    carried_file_entry = _locate_carried_file(graph, entities_by_id, action_file_refs)
+    carried_file_entry = _locate_carried_file(graph, action_file_refs)
 
     declared_digest = carried_file_entry.get("digest")
     if not declared_digest or not isinstance(declared_digest, str):
@@ -396,7 +394,6 @@ def _extract_action_file_refs(action_entities: list[dict[str, Any]]) -> set[str]
 
 def _locate_carried_file(
     graph: list[dict[str, Any]],
-    entities_by_id: dict[str, dict[str, Any]],
     action_file_refs: set[str],
 ) -> dict[str, Any]:
     candidates: list[dict[str, Any]] = []
@@ -404,6 +401,8 @@ def _locate_carried_file(
         if not isinstance(entity, dict):
             continue
         entity_id = entity.get("@id", "")
+        if not isinstance(entity_id, str):
+            continue
         entity_type = entity.get("@type", [])
         types = [entity_type] if isinstance(entity_type, str) else list(entity_type)
         is_file = "File" in types or "http://schema.org/MediaObject" in types

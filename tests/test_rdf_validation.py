@@ -337,6 +337,22 @@ def test_ro_crate_directory_traversal_component_rejected(repository_root, tmp_pa
         unpack_and_verify_crate(crate_dir)
 
 
+def test_ro_crate_unpack_and_verify_non_string_entity_id_cleanly_rejected(repository_root, tmp_path):
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "malformed_id_crate"
+    builder.build_crate(original_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    # Add malformed entity with non-string @id
+    metadata["@graph"].append({"@id": 123, "@type": "File"})
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(StructuralValidationError):
+        unpack_and_verify_crate(crate_dir)
+
+
 def test_ro_crate_unpack_and_verify_missing_about_rejected(repository_root, tmp_path):
     original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()
@@ -350,7 +366,7 @@ def test_ro_crate_unpack_and_verify_missing_about_rejected(repository_root, tmp_
             del entity["about"]
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="identifier derivation"):
+    with pytest.raises(StructuralValidationError):
         unpack_and_verify_crate(crate_dir)
 
 
