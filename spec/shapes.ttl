@@ -77,6 +77,23 @@ rcp:MetadataDescriptorShape a sh:NodeShape ;
   ] .
 
 rcp:RootDataEntityShape a sh:NodeShape ;
+  sh:target [
+    a sh:SPARQLTarget ;
+    sh:prefixes [
+      sh:declare [
+        sh:prefix "schema" ;
+        sh:namespace "http://schema.org/"^^xsd:anyURI ;
+      ]
+    ] ;
+    sh:select """
+      SELECT ?this WHERE {
+        ?desc a schema:CreativeWork ;
+              schema:about ?this .
+        ?this a schema:Dataset .
+        FILTER (STR(?desc) = "ro-crate-metadata.json" || STRENDS(STR(?desc), "/ro-crate-metadata.json"))
+      }
+    """ ;
+  ] ;
   sh:property [
     sh:path schema:hasPart ;
     sh:minCount 1 ;

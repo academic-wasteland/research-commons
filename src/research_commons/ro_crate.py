@@ -141,14 +141,24 @@ def build_crate(rcp_message: dict[str, Any] | str | bytes, output_target: str | 
 
         if is_zip:
             target_path.parent.mkdir(parents=True, exist_ok=True)
-            # Create a temporary zip file first for safe replacement
-            temp_zip = target_path.with_suffix(".tmp.zip")
-            with zipfile.ZipFile(temp_zip, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                for file_path in out_path.rglob("*"):
-                    if file_path.is_file():
-                        arcname = file_path.relative_to(out_path)
-                        zf.write(file_path, arcname=arcname)
-            temp_zip.replace(target_path)
+            # Create a unique temporary zip file in the destination directory for safe replacement
+            with tempfile.NamedTemporaryFile(
+                dir=target_path.parent,
+                prefix=f".{target_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as temp_file:
+                temp_zip = Path(temp_file.name)
+            try:
+                with zipfile.ZipFile(temp_zip, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                    for file_path in out_path.rglob("*"):
+                        if file_path.is_file():
+                            arcname = file_path.relative_to(out_path)
+                            zf.write(file_path, arcname=arcname)
+                temp_zip.replace(target_path)
+            except Exception:
+                temp_zip.unlink(missing_ok=True)
+                raise
             return target_path
         return out_path
     finally:
