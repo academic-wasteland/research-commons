@@ -63,9 +63,13 @@ def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
                 raise ValueError(f"Unsupported external context in RO-Crate metadata: {ctx}")
         elif isinstance(ctx, dict):
             # Inline context definitions are only allowed to rebind known safe terms
-            for key in ctx:
-                if key not in ("object", "name"):
-                    raise ValueError(f"Unsupported context term override in RO-Crate metadata: {key}")
+            expected_overrides = {
+                "object": {"@id": "schema:object", "@type": "@id"},
+                "name": "schema:name",
+            }
+            for key, val in ctx.items():
+                if key not in expected_overrides or val != expected_overrides[key]:
+                    raise ValueError(f"Unsupported context term override in RO-Crate metadata: {key}={val}")
 
     expanded = copy.deepcopy(metadata)
     local_rcp_context = load_json(SPEC_ROOT / "context.jsonld")["@context"]

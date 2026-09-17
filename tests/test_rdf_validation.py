@@ -44,7 +44,7 @@ def test_ro_crate_serialized_context_jsonld_expansion():
 
         graph = ro_crate_graph(metadata)
         # Check that triple (?action, schema:object, rcp-message.jsonld) is in the graph
-        schema_object = URIRef("http://schema.org/object")
+        schema_object = URIRef("https://schema.org/object")
         rcp_object = URIRef("https://w3id.org/research-commons/v0.1/object")
 
         predicates = {p for _, p, _ in graph}
@@ -324,6 +324,21 @@ def test_ro_crate_unpack_and_verify_action_id_mismatch_rejected(repository_root,
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
     with pytest.raises(ValueError, match="CreateAction identifier derivation mismatch"):
+        unpack_and_verify_crate(crate_dir)
+
+
+def test_ro_crate_unpack_and_verify_symlink_metadata_rejected(repository_root, tmp_path):
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "symlink_meta_crate"
+    builder.build_crate(original_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    outside_meta = tmp_path / "outside-metadata.json"
+    metadata_path.rename(outside_meta)
+    metadata_path.symlink_to(outside_meta)
+
+    with pytest.raises(ValueError, match="(must be regular file, not symlink|Metadata file path traversal detected)"):
         unpack_and_verify_crate(crate_dir)
 
 

@@ -256,9 +256,14 @@ def unpack_and_verify_crate(
 
 
 def _unpack_and_verify_directory(path: Path) -> dict[str, Any]:
-    metadata_file = path / METADATA_FILENAME
+    resolved_path = path.resolve()
+    metadata_file = (resolved_path / METADATA_FILENAME).resolve()
+    if not metadata_file.is_relative_to(resolved_path) or metadata_file == resolved_path:
+        raise ValueError(f"Metadata file path traversal detected: {metadata_file}")
     if not metadata_file.exists():
         raise ValueError(f"Missing {METADATA_FILENAME} in {path}")
+    if not metadata_file.is_file() or metadata_file.is_symlink():
+        raise ValueError(f"Invalid metadata file (must be regular file, not symlink): {metadata_file}")
 
     try:
         metadata = load_json(metadata_file)

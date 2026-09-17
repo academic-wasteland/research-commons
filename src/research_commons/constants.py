@@ -42,7 +42,7 @@ OBJECT_PROPERTIES = {
 
 RO_CRATE_BASE_CONTEXT = {
     "@version": 1.1,
-    "schema": "http://schema.org/",
+    "schema": "https://schema.org/",
     "Dataset": "schema:Dataset",
     "File": "schema:MediaObject",
     "CreateAction": "schema:CreateAction",
