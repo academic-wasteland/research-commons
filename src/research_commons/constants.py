@@ -1,9 +1,21 @@
 import json
+from importlib import resources
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 REPOSITORY_ROOT = PACKAGE_ROOT.parents[1]
-SPEC_ROOT = REPOSITORY_ROOT / "spec"
+
+# Locate spec root: either as bundled package data or repository spec directory
+try:
+    _pkg_spec = Path(str(resources.files("research_commons") / "spec"))
+    if _pkg_spec.exists():
+        SPEC_ROOT = _pkg_spec
+    elif (REPOSITORY_ROOT / "spec").exists():
+        SPEC_ROOT = REPOSITORY_ROOT / "spec"
+    else:
+        SPEC_ROOT = PACKAGE_ROOT / "spec"
+except (TypeError, ModuleNotFoundError, FileNotFoundError):
+    SPEC_ROOT = REPOSITORY_ROOT / "spec" if (REPOSITORY_ROOT / "spec").exists() else PACKAGE_ROOT / "spec"
 
 RCP = "https://w3id.org/research-commons/v0.1/"
 CONTEXT_IRI = f"{RCP}context.jsonld"
