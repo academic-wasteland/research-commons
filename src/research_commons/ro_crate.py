@@ -59,15 +59,13 @@ def build_crate(
     target_path = Path(output_target)
     is_zip = target_path.suffix.lower() == ".zip"
 
-    if is_zip:
-        temp_dir = Path(tempfile.mkdtemp(prefix="ro_crate_"))
-        out_path = temp_dir
-    else:
-        out_path = target_path
-        if out_path.exists() and any(out_path.iterdir()):
-            # Prevent stale or unrelated files from being disclosed or included in the crate
-            raise ValueError(f"Output directory {out_path} is not empty; refusing to overwrite")
-        out_path.mkdir(parents=True, exist_ok=True)
+    # Always stage files in a temporary directory first so failures don't leave partial output
+    temp_dir = Path(tempfile.mkdtemp(prefix="ro_crate_stage_"))
+    out_path = temp_dir
+
+    if not is_zip and target_path.exists() and any(target_path.iterdir()):
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise ValueError(f"Output directory {target_path} is not empty; refusing to overwrite")
 
     try:
         message_file = out_path / MESSAGE_FILENAME
@@ -181,10 +179,18 @@ def build_crate(
                 temp_zip.unlink(missing_ok=True)
                 raise
             return target_path
-        return out_path
+
+        # Directory target: move successfully validated staged directory to target_path
+        target_path.mkdir(parents=True, exist_ok=True)
+        for item in out_path.iterdir():
+            dest = target_path / item.name
+            if item.is_dir():
+                shutil.copytree(item, dest)
+            else:
+                shutil.copy2(item, dest)
+        return target_path
     finally:
-        if is_zip and 'temp_dir' in locals():
-            shutil.rmtree(temp_dir, ignore_errors=True)
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 MAX_ZIP_MEMBERS = 1000
@@ -265,8 +271,7 @@ def unpack_and_verify_crate(
                 ]
                 if not action_entities:
                     raise ValueError("RO-Crate metadata does not contain a CreateAction entity")
-                action_file_refs = _extract_action_file_refs(action_entities)
-                carried_file_entry = _locate_carried_file(graph, action_file_refs)
+                carried_file_entry = _locate_carried_file(graph, action_entities)
 
                 file_id = carried_file_entry.get("@id")
                 if not file_id or not isinstance(file_id, str):
@@ -332,8 +337,7 @@ def _unpack_and_verify_directory(path: Path) -> dict[str, Any]:
     if not action_entities:
         raise ValueError("RO-Crate metadata does not contain a CreateAction entity")
 
-    action_file_refs = _extract_action_file_refs(action_entities)
-    carried_file_entry = _locate_carried_file(graph, action_file_refs)
+    carried_file_entry = _locate_carried_file(graph, action_entities)
 
     declared_digest = carried_file_entry.get("digest")
     if not declared_digest or not isinstance(declared_digest, str):
@@ -465,23 +469,77 @@ def _extract_action_file_refs(action_entities: list[dict[str, Any]]) -> set[str]
 
 def _locate_carried_file(
     graph: list[dict[str, Any]],
-    action_file_refs: set[str],
+    action_entities: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    # First, identify the root dataset entity
+    root_entity = next(
+        (e for e in graph if isinstance(e, dict) and e.get("@id") == "./"),
+        None,
+    )
+    # Collect parts linked from root dataset
+    root_parts: set[str] = set()
+    if root_entity and isinstance(root_entity.get("hasPart"), list):
+        for part in root_entity["hasPart"]:
+            part_id = part.get("@id") if isinstance(part, dict) else part
+            if isinstance(part_id, str):
+                root_parts.add(part_id)
+
+    # Collect mentions from root dataset if present
+    root_mentions: set[str] = set()
+    if root_entity and isinstance(root_entity.get("mentions"), list):
+        for mention in root_entity["mentions"]:
+            mention_id = mention.get("@id") if isinstance(mention, dict) else mention
+            if isinstance(mention_id, str):
+                root_mentions.add(mention_id)
+
+    # Filter action entities to those explicitly mentioned by root (carrier actions)
+    carrier_actions = [
+        a for a in action_entities
+        if not root_mentions or a.get("@id") in root_mentions
+    ]
+    if not carrier_actions:
+        carrier_actions = action_entities
+
+    # First pass: look for candidates linked by carrier_actions
     candidates: list[dict[str, Any]] = []
-    for entity in graph:
-        if not isinstance(entity, dict):
-            continue
-        entity_id = entity.get("@id", "")
-        if not isinstance(entity_id, str):
-            continue
-        entity_type = entity.get("@type", [])
-        types = [entity_type] if isinstance(entity_type, str) else list(entity_type)
-        is_file = "File" in types or "http://schema.org/MediaObject" in types
-        has_digest = isinstance(entity.get("digest"), str)
-        is_jsonld = entity.get("encodingFormat") == "application/ld+json" or entity_id.endswith(".jsonld")
-        is_action_ref = entity_id in action_file_refs
-        if is_file and has_digest and is_jsonld and is_action_ref:
-            candidates.append(entity)
+    for action in carrier_actions:
+        action_file_refs = _extract_action_file_refs([action])
+        for entity in graph:
+            if not isinstance(entity, dict):
+                continue
+            entity_id = entity.get("@id", "")
+            if not isinstance(entity_id, str):
+                continue
+            entity_type = entity.get("@type", [])
+            types = [entity_type] if isinstance(entity_type, str) else list(entity_type)
+            is_file = "File" in types or "http://schema.org/MediaObject" in types
+            has_digest = isinstance(entity.get("digest"), str)
+            is_jsonld = entity.get("encodingFormat") == "application/ld+json" or entity_id.endswith(".jsonld")
+            is_action_ref = entity_id in action_file_refs
+            is_root_part = not root_parts or entity_id in root_parts
+
+            if is_file and has_digest and is_jsonld and is_action_ref and is_root_part and entity not in candidates:
+                candidates.append(entity)
+
+    # If root_parts was restricted and yielded no candidate, check across carrier actions without root_parts
+    if not candidates:
+        for action in carrier_actions:
+            action_file_refs = _extract_action_file_refs([action])
+            for entity in graph:
+                if not isinstance(entity, dict):
+                    continue
+                entity_id = entity.get("@id", "")
+                if not isinstance(entity_id, str):
+                    continue
+                entity_type = entity.get("@type", [])
+                types = [entity_type] if isinstance(entity_type, str) else list(entity_type)
+                is_file = "File" in types or "http://schema.org/MediaObject" in types
+                has_digest = isinstance(entity.get("digest"), str)
+                is_jsonld = entity.get("encodingFormat") == "application/ld+json" or entity_id.endswith(".jsonld")
+                is_action_ref = entity_id in action_file_refs
+
+                if is_file and has_digest and is_jsonld and is_action_ref and entity not in candidates:
+                    candidates.append(entity)
 
     if len(candidates) == 1:
         return candidates[0]

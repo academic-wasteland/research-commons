@@ -126,6 +126,35 @@ def test_ro_crate_builder_with_instrument_entity(repository_root, tmp_path):
     assert recovered["@id"] == task_doc["@id"]
 
 
+def test_ro_crate_failed_build_cleans_up_staged_output(repository_root, tmp_path):
+    task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    bad_workflow_tool = {
+        "@id": "https://example.org/software/predictor",
+        "@type": "SoftwareApplication",
+        "name": "Predictor Tool",
+        "@context": "https://attacker.invalid/injected.jsonld",
+    }
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "staged_fail_crate"
+
+    # Build should fail validation
+    with pytest.raises(ValueError, match="Unsupported external context"):
+        builder.build_crate(task_doc, crate_dir, workflow_tool=bad_workflow_tool)
+
+    # Output directory must not exist or must remain completely empty so retry succeeds
+    assert not crate_dir.exists() or not any(crate_dir.iterdir())
+
+    # Retrying with valid tool succeeds without tripping non-empty directory guard
+    valid_workflow_tool = {
+        "@id": "https://example.org/software/predictor",
+        "@type": "SoftwareApplication",
+        "name": "Predictor Tool",
+    }
+    built_path = builder.build_crate(task_doc, crate_dir, workflow_tool=valid_workflow_tool)
+    assert built_path == crate_dir
+    assert (crate_dir / ROCrateBuilder.METADATA_FILENAME).exists()
+
+
 def test_ro_crate_builder_with_tool_unapproved_context_rejected(repository_root, tmp_path):
     task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     workflow_tool = {
@@ -271,16 +300,23 @@ def test_ro_crate_multi_action_unrelated_action_ignored(repository_root, tmp_pat
     metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
 
-    # Add an unrelated CreateAction for another artifact without any rcp:digest
+    # Add an unrelated CreateAction for another artifact that is also a JSON-LD file with a digest
+    metadata["@graph"].append({
+        "@id": "auxiliary-message.jsonld",
+        "@type": "File",
+        "name": "Auxiliary payload",
+        "encodingFormat": "application/ld+json",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    })
     metadata["@graph"].append({
         "@id": "#unrelated-action",
         "@type": "CreateAction",
         "name": "Unrelated action",
-        "object": {"@id": "some-input.txt"},
+        "object": {"@id": "auxiliary-message.jsonld"},
     })
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
-    # Both SHACL validation and crate recovery must pass without requiring a digest on the unrelated action
+    # Both SHACL validation and crate recovery must disambiguate the carried RCP message
     shacl_res = validate_crate_shacl(metadata)
     assert shacl_res.conforms, shacl_res.report
 
