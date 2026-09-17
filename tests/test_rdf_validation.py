@@ -12,7 +12,7 @@ from research_commons.rdf_validation import (
     validate_crate_shacl,
     validate_shacl,
 )
-from research_commons.schema import load_json
+from research_commons.schema import StructuralValidationError, load_json
 
 
 def test_direct_ro_crate_module_import():
@@ -267,6 +267,65 @@ def test_ro_crate_unpack_and_verify_missing_about_rejected(repository_root, tmp_
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
     with pytest.raises(ValueError, match="identifier derivation"):
+        unpack_and_verify_crate(crate_dir)
+
+
+def test_ro_crate_unpack_and_verify_invalid_root_type_rejected(repository_root, tmp_path):
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "invalid_root_type_crate"
+    builder.build_crate(original_doc, crate_dir)
+
+    # Modify carried file to have an invalid root type
+    message_path = crate_dir / ROCrateBuilder.MESSAGE_FILENAME
+    carried = json.loads(message_path.read_text(encoding="utf-8"))
+    carried["@type"] = "SoftwareSourceCode"
+    # Also update digests to bypass digest check so root type check is isolated
+    from research_commons.ledger import canonical_json, document_digest
+
+    new_digest = document_digest(carried)
+    message_path.write_bytes(canonical_json(carried).encode("utf-8"))
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    for entity in metadata["@graph"]:
+        if entity.get("@id") == ROCrateBuilder.MESSAGE_FILENAME:
+            entity["digest"] = new_digest
+        if entity.get("@type") == "CreateAction":
+            entity["digest"] = new_digest
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises((ValueError, StructuralValidationError)):
+        unpack_and_verify_crate(crate_dir)
+
+
+def test_ro_crate_unpack_and_verify_missing_id_rejected(repository_root, tmp_path):
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "missing_id_crate"
+    builder.build_crate(original_doc, crate_dir)
+
+    # Modify carried file to drop @id
+    message_path = crate_dir / ROCrateBuilder.MESSAGE_FILENAME
+    carried = json.loads(message_path.read_text(encoding="utf-8"))
+    del carried["@id"]
+
+    from research_commons.ledger import canonical_json, document_digest
+
+    new_digest = document_digest(carried)
+    message_path.write_bytes(canonical_json(carried).encode("utf-8"))
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    for entity in metadata["@graph"]:
+        if entity.get("@id") == ROCrateBuilder.MESSAGE_FILENAME:
+            entity["digest"] = new_digest
+            entity["about"] = {"@id": ""}
+        if entity.get("@type") == "CreateAction":
+            entity["digest"] = new_digest
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises((ValueError, StructuralValidationError)):
         unpack_and_verify_crate(crate_dir)
 
 
