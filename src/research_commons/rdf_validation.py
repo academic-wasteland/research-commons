@@ -55,10 +55,8 @@ def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
         "https://w3id.org/ro/crate/1.1/context",
         "https://w3id.org/research-commons/v0.1/context.jsonld",
     }
-    context_iris: set[str] = set()
     for ctx in declared_context:
         if isinstance(ctx, str):
-            context_iris.add(ctx)
             if ctx not in expected_iris:
                 raise ValueError(f"Unsupported external context in RO-Crate metadata: {ctx}")
         elif isinstance(ctx, dict):
@@ -71,19 +69,20 @@ def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
                 if key not in expected_overrides or val != expected_overrides[key]:
                     raise ValueError(f"Unsupported context term override in RO-Crate metadata: {key}={val}")
 
-    expanded = copy.deepcopy(metadata)
     local_rcp_context = load_json(SPEC_ROOT / "context.jsonld")["@context"]
-    # Preserve standard JSON-LD semantics by following the serialized context array:
-    # RO-Crate base context, then RCP context, then explicit preservation of schema:object and schema:name.
-    crate_context: list[Any] = [
-        RO_CRATE_BASE_CONTEXT,
-        local_rcp_context,
-        {
-            "object": {"@id": "http://schema.org/object", "@type": "@id"},
-            "name": "http://schema.org/name",
-        },
-    ]
-    expanded["@context"] = crate_context
+    # Replace each approved remote context with its local copy in place,
+    # preserving exact declaration order and inline contexts.
+    resolved_context: list[Any] = []
+    for ctx in declared_context:
+        if ctx == "https://w3id.org/ro/crate/1.1/context":
+            resolved_context.append(RO_CRATE_BASE_CONTEXT)
+        elif ctx == "https://w3id.org/research-commons/v0.1/context.jsonld":
+            resolved_context.append(local_rcp_context)
+        else:
+            resolved_context.append(ctx)
+
+    expanded = copy.deepcopy(metadata)
+    expanded["@context"] = resolved_context
     graph = Graph()
     graph.parse(data=json.dumps(expanded), format="json-ld")
     return graph

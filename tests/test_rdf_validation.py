@@ -222,6 +222,46 @@ def test_ro_crate_zip_archive_size_limit_rejected(tmp_path):
 
 
 
+def test_ro_crate_cli_to_and_from_crate(repository_root, tmp_path, capsys):
+    from research_commons.cli import main
+
+    task_doc_path = repository_root / "examples/metagenomics/task.jsonld"
+    zip_target = tmp_path / "cli_bundle.crate.zip"
+
+    # Test to-crate CLI
+    ret = main(["to-crate", str(task_doc_path), str(zip_target)])
+    assert ret == 0
+    assert zip_target.is_file()
+
+    # Test from-crate CLI
+    capsys.readouterr()  # clear buffer
+    ret = main(["from-crate", str(zip_target)])
+    assert ret == 0
+    captured = capsys.readouterr()
+    recovered = json.loads(captured.out)
+    original = load_json(task_doc_path)
+    assert recovered == original
+
+
+def test_ro_crate_carrier_shacl_auxiliary_creative_work_allowed(repository_root, tmp_path):
+    task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "test_crate_shacl_cw"
+    builder.build_crate(task_doc, crate_dir)
+
+    metadata_path = crate_dir / "ro-crate-metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+
+    # Auxiliary CreativeWork without about: ./ should be allowed
+    metadata["@graph"].append({
+        "@id": "auxiliary-article.pdf",
+        "@type": "CreativeWork",
+        "name": "Auxiliary Documentation Article",
+    })
+    shacl_result = validate_crate_shacl(metadata)
+    assert shacl_result.conforms, shacl_result.report
+
+
 def test_ro_crate_carrier_shacl_rejection(repository_root, tmp_path):
     task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()

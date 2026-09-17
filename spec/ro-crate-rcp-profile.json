@@ -26,6 +26,11 @@
       "allOf": [
         {
           "contains": {
+            "$ref": "#/definitions/metadataDescriptor"
+          }
+        },
+        {
+          "contains": {
             "$ref": "#/definitions/rootDataEntity"
           }
         },
@@ -76,6 +81,29 @@
       "pattern": "^sha256:[0-9a-f]{64}$",
       "description": "Slot for storing a canonical SHA-256 digest of the carried JSON-LD message per ADR 0002"
     },
+    "metadataDescriptor": {
+      "type": "object",
+      "required": ["@id", "@type", "about", "conformsTo"],
+      "properties": {
+        "@id": {"const": "ro-crate-metadata.json"},
+        "@type": {
+          "oneOf": [
+            {"const": "CreativeWork"},
+            {"type": "array", "contains": {"const": "CreativeWork"}}
+          ]
+        },
+        "about": {
+          "type": "object",
+          "required": ["@id"],
+          "properties": {
+            "@id": {"const": "./"}
+          }
+        },
+        "conformsTo": {
+          "description": "Reference to RO-Crate specification version"
+        }
+      }
+    },
     "rootDataEntity": {
       "type": "object",
       "required": ["@id", "@type", "hasPart", "conformsTo"],
@@ -88,7 +116,15 @@
           ]
         },
         "conformsTo": {
-          "description": "Reference to RO-Crate profile URIs"
+          "description": "Reference to RO-Crate profile URIs",
+          "type": "array",
+          "contains": {
+            "type": "object",
+            "required": ["@id"],
+            "properties": {
+              "@id": {"const": "https://w3id.org/research-commons/v0.1/ro-crate-rcp-profile.json"}
+            }
+          }
         },
         "hasPart": {
           "type": "array",

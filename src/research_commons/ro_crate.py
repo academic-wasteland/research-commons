@@ -107,10 +107,9 @@ def build_crate(rcp_message: dict[str, Any] | str | bytes, output_target: str | 
         if isinstance(agent_info, dict) and agent_info.get("@id"):
             raw_type = agent_info.get("@type")
             if isinstance(raw_type, list):
-                mapped_type = [t.split("/")[-1] if "/" in t else t for t in raw_type]
-                entity_type = mapped_type if len(mapped_type) > 1 else (mapped_type[0] if mapped_type else "Agent")
+                entity_type = raw_type if raw_type else "Agent"
             elif isinstance(raw_type, str):
-                entity_type = raw_type.split("/")[-1] if "/" in raw_type else raw_type
+                entity_type = raw_type
             else:
                 entity_type = "Agent"
             graph.append(

@@ -27,42 +27,59 @@ rcp:ClaimShape a sh:NodeShape ;
 
 rcp:MetadataDescriptorShape a sh:NodeShape ;
   sh:targetClass schema:CreativeWork ;
-  sh:property [
-    sh:path schema:about ;
-    sh:minCount 1 ;
-    sh:maxCount 1 ;
-    sh:node rcp:RootDataEntityShape ;
+  sh:sparql [
+    sh:message "Metadata descriptor must conform to RO-Crate and describe the root data entity." ;
+    sh:prefixes [
+      sh:declare [
+        sh:prefix "schema" ;
+        sh:namespace "http://schema.org/"^^xsd:anyURI ;
+      ]
+    ] ;
+    sh:select """
+      SELECT $this ?root WHERE {
+        $this a schema:CreativeWork ;
+              schema:about ?root .
+        FILTER (STR($this) = "ro-crate-metadata.json" || STRENDS(STR($this), "/ro-crate-metadata.json"))
+        FILTER NOT EXISTS {
+          ?root a schema:Dataset ;
+                schema:hasPart ?part .
+        }
+      }
+    """ ;
+  ] ;
+  sh:sparql [
+    sh:message "RO-Crate Root Data Entity must explicitly link to parts including the carried RCP JSON-LD file." ;
+    sh:prefixes [
+      sh:declare [
+        sh:prefix "schema" ;
+        sh:namespace "http://schema.org/"^^xsd:anyURI ;
+      ] , [
+        sh:prefix "rcp" ;
+        sh:namespace "https://w3id.org/research-commons/v0.1/"^^xsd:anyURI ;
+      ]
+    ] ;
+    sh:select """
+      SELECT $this ?root WHERE {
+        $this a schema:CreativeWork ;
+              schema:about ?root .
+        FILTER (STR($this) = "ro-crate-metadata.json" || STRENDS(STR($this), "/ro-crate-metadata.json"))
+        FILTER NOT EXISTS {
+          ?root schema:hasPart ?file .
+          ?file a schema:MediaObject ;
+                schema:encodingFormat "application/ld+json" ;
+                rcp:digest ?digest ;
+                schema:about ?msgId .
+          { ?action schema:object ?file } UNION { ?action schema:result ?file }
+          ?action a schema:CreateAction .
+        }
+      }
+    """ ;
   ] .
 
 rcp:RootDataEntityShape a sh:NodeShape ;
-  sh:class schema:Dataset ;
   sh:property [
     sh:path schema:hasPart ;
-    sh:qualifiedValueShape [
-      sh:nodeKind sh:IRI ;
-      sh:property [
-        sh:path schema:encodingFormat ;
-        sh:hasValue "application/ld+json" ;
-        sh:minCount 1 ;
-      ] ;
-      sh:property [
-        sh:path rcp:digest ;
-        sh:minCount 1 ;
-        sh:datatype xsd:string ;
-      ] ;
-      sh:property [
-        sh:path schema:about ;
-        sh:minCount 1 ;
-        sh:nodeKind sh:IRI ;
-      ] ;
-      sh:property [
-        sh:path [ sh:inversePath [ sh:alternativePath ( schema:object schema:result ) ] ] ;
-        sh:class schema:CreateAction ;
-        sh:minCount 1 ;
-      ] ;
-    ] ;
-    sh:qualifiedMinCount 1 ;
-    sh:message "RO-Crate Root Data Entity must explicitly link to parts including the carried RCP JSON-LD file." ;
+    sh:minCount 1 ;
   ] .
 
 rcp:CreateActionCarrierShape a sh:NodeShape ;

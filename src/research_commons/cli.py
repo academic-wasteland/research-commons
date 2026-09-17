@@ -7,6 +7,7 @@ from . import beads, wasteland
 from .contracts import ContractManifest
 from .km import KMRunner
 from .rdf_validation import validate_shacl
+from .ro_crate import from_crate, to_crate
 from .schema import (
     StructuralValidationError,
     load_json,
@@ -85,6 +86,13 @@ def parser() -> argparse.ArgumentParser:
     to_stamp.add_argument("--completion", required=True, help="Wasteland completion id being stamped")
     to_stamp.add_argument("--hop-uri")
     to_stamp.add_argument("--sql", action="store_true")
+
+    to_crate_cmd = commands.add_parser("to-crate", help="Package an RCP message into a Workflow Run RO-Crate")
+    to_crate_cmd.add_argument("document", type=Path)
+    to_crate_cmd.add_argument("output", type=Path, help="Target directory or .zip archive path")
+
+    from_crate_cmd = commands.add_parser("from-crate", help="Recover and verify an RCP message from an RO-Crate")
+    from_crate_cmd.add_argument("crate", type=Path, help="Source directory or .zip archive path")
     return root
 
 
@@ -139,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
 
-_LEDGER_COMMANDS = {"to-bead", "from-bead", "to-wanted", "to-completion", "to-stamp"}
+_LEDGER_COMMANDS = {"to-bead", "from-bead", "to-wanted", "to-completion", "to-stamp", "to-crate", "from-crate"}
 
 
 def _ledger(arguments: argparse.Namespace) -> int:
@@ -174,6 +182,14 @@ def _ledger(arguments: argparse.Namespace) -> int:
             load_json(arguments.document), completed_by=arguments.completed_by, hop_uri=arguments.hop_uri
         )
         return _emit_row("completions", row, arguments.sql)
+    if arguments.command == "to-crate":
+        out_path = to_crate(load_json(arguments.document), arguments.output)
+        _print({"status": "created", "crate": str(out_path)})
+        return 0
+    if arguments.command == "from-crate":
+        recovered_doc = from_crate(arguments.crate)
+        _print(recovered_doc)
+        return 0
     row = wasteland.report_to_stamp(
         load_json(arguments.report),
         author=arguments.author,
