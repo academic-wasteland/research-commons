@@ -46,14 +46,38 @@ def validate_shacl(document: dict[str, Any]) -> ShaclResult:
 
 def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
     """Build RDF Graph for an RO-Crate metadata document using local context definitions."""
+    # Ensure declared @context does not contain unsupported or overriding external contexts
+    declared_context = metadata.get("@context")
+    if not isinstance(declared_context, list):
+        raise TypeError("RO-Crate metadata must have a list @context")
+
+    expected_iris = {
+        "https://w3id.org/ro/crate/1.1/context",
+        "https://w3id.org/research-commons/v0.1/context.jsonld",
+    }
+    context_iris: set[str] = set()
+    for ctx in declared_context:
+        if isinstance(ctx, str):
+            context_iris.add(ctx)
+            if ctx not in expected_iris:
+                raise ValueError(f"Unsupported external context in RO-Crate metadata: {ctx}")
+        elif isinstance(ctx, dict):
+            # Inline context definitions are only allowed to rebind known safe terms
+            for key in ctx:
+                if key not in ("object", "name"):
+                    raise ValueError(f"Unsupported context term override in RO-Crate metadata: {key}")
+
     expanded = copy.deepcopy(metadata)
     local_rcp_context = load_json(SPEC_ROOT / "context.jsonld")["@context"]
     # Preserve standard JSON-LD semantics by following the serialized context array:
-    # RO-Crate base context, then RCP context, then explicit preservation of schema:object.
+    # RO-Crate base context, then RCP context, then explicit preservation of schema:object and schema:name.
     crate_context: list[Any] = [
         RO_CRATE_BASE_CONTEXT,
         local_rcp_context,
-        {"object": {"@id": "schema:object", "@type": "@id"}},
+        {
+            "object": {"@id": "schema:object", "@type": "@id"},
+            "name": "schema:name",
+        },
     ]
     expanded["@context"] = crate_context
     graph = Graph()

@@ -78,6 +78,32 @@ def test_shacl_requires_explicit_producer(repository_root):
     assert not result.conforms
 
 
+def test_ro_crate_graph_unsupported_context_rejected(repository_root, tmp_path):
+    task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "custom_ctx_crate"
+    builder.build_crate(task_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    # Attacker appends an overriding context
+    metadata["@context"].append("https://attacker.invalid/context.jsonld")
+
+    with pytest.raises(ValueError, match="Unsupported external context"):
+        ro_crate_graph(metadata)
+
+
+def test_ro_crate_builder_refuses_non_empty_directory(repository_root, tmp_path):
+    task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "non_empty_crate"
+    crate_dir.mkdir()
+    (crate_dir / "stale_secret.txt").write_text("preexisting sensitive content")
+
+    with pytest.raises(ValueError, match="is not empty; refusing to overwrite"):
+        builder.build_crate(task_doc, crate_dir)
+
+
 def test_ro_crate_builder_and_serialization(repository_root, tmp_path):
     task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()
