@@ -14,6 +14,18 @@ from research_commons.rdf_validation import (
 from research_commons.schema import load_json
 
 
+def test_direct_ro_crate_module_import():
+    # Verify no circular import between ro_crate and rdf_validation
+    import importlib
+
+    import research_commons.ro_crate
+
+    importlib.reload(research_commons.ro_crate)
+    assert hasattr(research_commons.ro_crate, "ROCrateBuilder")
+    assert hasattr(research_commons.ro_crate, "build_crate")
+    assert hasattr(research_commons.ro_crate, "unpack_and_verify_crate")
+
+
 def test_task_jsonld_expands_without_network(repository_root):
     document = load_json(repository_root / "examples/metagenomics/task.jsonld")
     graph = message_graph(document)
@@ -72,6 +84,17 @@ def test_ro_crate_functional_api_roundtrip(repository_root, tmp_path):
     assert recovered == task_doc
 
 
+def test_ro_crate_zip_archive_roundtrip(repository_root, tmp_path):
+    task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    zip_path = tmp_path / "bundle.crate.zip"
+    build_result = to_crate(task_doc, zip_path)
+    assert build_result == zip_path
+    assert zip_path.is_file()
+
+    recovered = from_crate(zip_path)
+    assert recovered == task_doc
+
+
 
 def test_ro_crate_carrier_shacl_rejection(repository_root, tmp_path):
     task_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
@@ -123,6 +146,7 @@ def test_ro_crate_carrier_shacl_auxiliary_dataset_and_missing_haspart(repository
     [
         "examples/metagenomics/task.jsonld",
         "examples/metagenomics/contribution.jsonld",
+        "examples/metagenomics/request.jsonld",
     ],
 )
 def test_ro_crate_unpack_and_verify_success(repository_root, tmp_path, doc_fixture_path):
@@ -169,6 +193,23 @@ def test_ro_crate_unpack_and_verify_id_mismatch_rejected(repository_root, tmp_pa
     for entity in metadata["@graph"]:
         if entity.get("@id") == ROCrateBuilder.MESSAGE_FILENAME:
             entity["about"] = {"@id": "urn:uuid:00000000-0000-0000-0000-000000000000"}
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="identifier derivation"):
+        unpack_and_verify_crate(crate_dir)
+
+
+def test_ro_crate_unpack_and_verify_missing_about_rejected(repository_root, tmp_path):
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "missing_about_crate"
+    builder.build_crate(original_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    for entity in metadata["@graph"]:
+        if entity.get("@id") == ROCrateBuilder.MESSAGE_FILENAME:
+            del entity["about"]
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
     with pytest.raises(ValueError, match="identifier derivation"):
@@ -254,6 +295,35 @@ def test_ro_crate_unpack_rejects_missing_create_action(repository_root, tmp_path
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
     with pytest.raises(ValueError):
+        unpack_and_verify_crate(crate_dir)
+
+
+def test_ro_crate_unpack_rejects_conventional_filename_without_valid_carrier_properties(
+    repository_root, tmp_path
+):
+    original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "conventional_bypass_crate"
+    builder.build_crate(original_doc, crate_dir)
+
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+
+    # Turn rcp-message.jsonld into an entity that is not referenced by CreateAction and not a File
+    for entity in metadata["@graph"]:
+        if entity.get("@id") == ROCrateBuilder.MESSAGE_FILENAME:
+            entity["@type"] = "Dataset"
+            del entity["digest"]
+        if entity.get("@type") == "CreateAction":
+            # Point CreateAction away from rcp-message.jsonld
+            entity["object"] = {"@id": "some-other-file.txt"}
+
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match="does not contain a valid carried RCP message file entity|failed SHACL shape validation|does not contain items matching the given schema",
+    ):
         unpack_and_verify_crate(crate_dir)
 
 

@@ -6,12 +6,14 @@ conformance, carrier SHACL constraints, digest integrity, and message semantics.
 """
 
 import json
+import shutil
+import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any
 
 from .constants import RCP
 from .ledger import canonical_json, document_digest, root_types
-from .rdf_validation import validate_crate_shacl
 from .schema import load_json, validate_against, validate_message
 
 MESSAGE_FILENAME = "rcp-message.jsonld"
@@ -29,85 +31,140 @@ VALID_ROOT_TYPES = {
 }
 
 
-def build_crate(rcp_message: dict[str, Any], output_dir: str | Path) -> Path:
-    """Package task inputs and outputs and generate a Workflow Run RO-Crate."""
+def build_crate(rcp_message: dict[str, Any], output_target: str | Path) -> Path:
+    """Package task inputs and outputs and generate a Workflow Run RO-Crate.
+
+    Accepts either a directory path or a `.zip` archive destination path.
+    If a `.zip` path is provided, creates a valid RO-Crate ZIP archive.
+    """
     validate_message(rcp_message)
-    out_path = Path(output_dir)
-    out_path.mkdir(parents=True, exist_ok=True)
+    target_path = Path(output_target)
+    is_zip = target_path.suffix.lower() == ".zip"
 
-    message_file = out_path / MESSAGE_FILENAME
-    message_bytes = canonical_json(rcp_message).encode("utf-8")
-    message_file.write_bytes(message_bytes)
+    if is_zip:
+        temp_dir = Path(tempfile.mkdtemp(prefix="ro_crate_"))
+        out_path = temp_dir
+    else:
+        out_path = target_path
+        out_path.mkdir(parents=True, exist_ok=True)
 
-    digest = document_digest(rcp_message)
-    msg_id = rcp_message.get("@id", "")
-    types = root_types(rcp_message)
+    try:
+        message_file = out_path / MESSAGE_FILENAME
+        message_bytes = canonical_json(rcp_message).encode("utf-8")
+        message_file.write_bytes(message_bytes)
 
-    action_id, action_entity = _assemble_action_entity(rcp_message, msg_id, types, digest)
+        digest = document_digest(rcp_message)
+        msg_id = rcp_message.get("@id", "")
+        types = root_types(rcp_message)
 
-    graph: list[dict[str, Any]] = [
-        {
-            "@id": METADATA_FILENAME,
-            "@type": "CreativeWork",
-            "conformsTo": {"@id": "https://w3id.org/ro/crate/1.1"},
-            "about": {"@id": "./"},
-        },
-        {
-            "@id": "./",
-            "@type": "Dataset",
-            "conformsTo": [
-                {"@id": "https://w3id.org/ro/crate/1.1"},
-                {"@id": PROFILE_ID},
-            ],
-            "hasPart": [
-                {"@id": MESSAGE_FILENAME},
-            ],
-            "mentions": [
-                {"@id": action_id},
-            ],
-        },
-        {
-            "@id": MESSAGE_FILENAME,
-            "@type": "File",
-            "name": "Verbatim RCP JSON-LD Message",
-            "encodingFormat": "application/ld+json",
-            "digest": digest,
-            "about": {"@id": msg_id},
-        },
-        action_entity,
-    ]
+        action_id, action_entity = _assemble_action_entity(rcp_message, msg_id, types, digest)
 
-    agent_info = rcp_message.get("producedBy") or rcp_message.get("requestedBy")
-    if isinstance(agent_info, dict) and agent_info.get("@id"):
-        graph.append(
+        graph: list[dict[str, Any]] = [
             {
-                "@id": agent_info["@id"],
-                "@type": "Person" if "Person" in agent_info.get("@type", "") else "Organization",
-                "name": agent_info.get("name", "Agent"),
-            }
-        )
+                "@id": METADATA_FILENAME,
+                "@type": "CreativeWork",
+                "conformsTo": {"@id": "https://w3id.org/ro/crate/1.1"},
+                "about": {"@id": "./"},
+            },
+            {
+                "@id": "./",
+                "@type": "Dataset",
+                "conformsTo": [
+                    {"@id": "https://w3id.org/ro/crate/1.1"},
+                    {"@id": PROFILE_ID},
+                ],
+                "hasPart": [
+                    {"@id": MESSAGE_FILENAME},
+                ],
+                "mentions": [
+                    {"@id": action_id},
+                ],
+            },
+            {
+                "@id": MESSAGE_FILENAME,
+                "@type": "File",
+                "name": "Verbatim RCP JSON-LD Message",
+                "encodingFormat": "application/ld+json",
+                "digest": digest,
+                "about": {"@id": msg_id},
+            },
+            action_entity,
+        ]
 
-    crate_metadata: dict[str, Any] = {
-        "@context": [
-            "https://w3id.org/ro/crate/1.1/context",
-            "https://w3id.org/research-commons/v0.1/context.jsonld",
-        ],
-        "@graph": graph,
-    }
+        agent_info = rcp_message.get("producedBy") or rcp_message.get("requestedBy")
+        if isinstance(agent_info, dict) and agent_info.get("@id"):
+            raw_type = agent_info.get("@type")
+            if isinstance(raw_type, list):
+                mapped_type = [t.split("/")[-1] if "/" in t else t for t in raw_type]
+                entity_type = mapped_type if len(mapped_type) > 1 else (mapped_type[0] if mapped_type else "Agent")
+            elif isinstance(raw_type, str):
+                entity_type = raw_type.split("/")[-1] if "/" in raw_type else raw_type
+            else:
+                entity_type = "Agent"
+            graph.append(
+                {
+                    "@id": agent_info["@id"],
+                    "@type": entity_type,
+                    "name": agent_info.get("name", "Agent"),
+                }
+            )
 
-    validate_against(crate_metadata, PROFILE_SCHEMA)
+        crate_metadata: dict[str, Any] = {
+            "@context": [
+                "https://w3id.org/ro/crate/1.1/context",
+                "https://w3id.org/research-commons/v0.1/context.jsonld",
+            ],
+            "@graph": graph,
+        }
 
-    metadata_file = out_path / METADATA_FILENAME
-    metadata_file.write_text(json.dumps(crate_metadata, indent=2, ensure_ascii=False), encoding="utf-8")
-    return out_path
+        validate_against(crate_metadata, PROFILE_SCHEMA)
+
+        metadata_file = out_path / METADATA_FILENAME
+        metadata_file.write_text(json.dumps(crate_metadata, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        if is_zip:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            # Create a temporary zip file first for safe replacement
+            temp_zip = target_path.with_suffix(".tmp.zip")
+            with zipfile.ZipFile(temp_zip, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                for file_path in out_path.rglob("*"):
+                    if file_path.is_file():
+                        arcname = file_path.relative_to(out_path)
+                        zf.write(file_path, arcname=arcname)
+            temp_zip.replace(target_path)
+            return target_path
+        return out_path
+    finally:
+        if is_zip and 'temp_dir' in locals():
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def unpack_and_verify_crate(crate_dir: str | Path) -> dict[str, Any]:
-    """Recover and re-validate the carried RCP JSON-LD document from an RO-Crate."""
-    path = Path(crate_dir)
+def unpack_and_verify_crate(crate_source: str | Path) -> dict[str, Any]:
+    """Recover and re-validate the carried RCP JSON-LD document from an RO-Crate directory or ZIP."""
+    source_path = Path(crate_source)
+    is_zip = source_path.is_file() and (source_path.suffix.lower() == ".zip" or zipfile.is_zipfile(source_path))
+
+    if is_zip:
+        temp_dir = Path(tempfile.mkdtemp(prefix="ro_crate_extract_"))
+        try:
+            with zipfile.ZipFile(source_path, "r") as zf:
+                # Safe extraction preventing path traversal from malicious zips
+                for member in zf.infolist():
+                    member_path = Path(member.filename)
+                    if member_path.is_absolute() or ".." in member_path.parts:
+                        raise ValueError(f"Insecure zip archive member: {member.filename}")
+                zf.extractall(temp_dir)
+            return _unpack_and_verify_directory(temp_dir)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+    else:
+        return _unpack_and_verify_directory(source_path)
+
+
+def _unpack_and_verify_directory(path: Path) -> dict[str, Any]:
     metadata_file = path / METADATA_FILENAME
     if not metadata_file.exists():
-        raise ValueError(f"Missing {METADATA_FILENAME} in {crate_dir}")
+        raise ValueError(f"Missing {METADATA_FILENAME} in {path}")
 
     try:
         metadata = load_json(metadata_file)
@@ -116,6 +173,8 @@ def unpack_and_verify_crate(crate_dir: str | Path) -> dict[str, Any]:
 
     # Validate profile schema and carrier SHACL shapes
     validate_against(metadata, PROFILE_SCHEMA)
+    from .rdf_validation import validate_crate_shacl
+
     shacl_res = validate_crate_shacl(metadata)
     if not shacl_res.conforms:
         raise ValueError(f"RO-Crate metadata failed SHACL shape validation: {shacl_res.report}")
@@ -174,8 +233,8 @@ class ROCrateBuilder:
     METADATA_FILENAME = METADATA_FILENAME
     PROFILE_ID = PROFILE_ID
 
-    def build_crate(self, rcp_message: dict[str, Any], output_dir: str | Path) -> Path:
-        return build_crate(rcp_message, output_dir)
+    def build_crate(self, rcp_message: dict[str, Any], output_target: str | Path) -> Path:
+        return build_crate(rcp_message, output_target)
 
 
 def _assemble_action_entity(
@@ -244,10 +303,6 @@ def _locate_carried_file(
     entities_by_id: dict[str, dict[str, Any]],
     action_file_refs: set[str],
 ) -> dict[str, Any]:
-    carried_file_entry = entities_by_id.get(MESSAGE_FILENAME)
-    if carried_file_entry:
-        return carried_file_entry
-
     candidates: list[dict[str, Any]] = []
     for entity in graph:
         if not isinstance(entity, dict):
@@ -321,7 +376,7 @@ def _validate_carried_doc(extracted_doc: dict[str, Any], carried_file_entry: dic
     about_id = carried_file_entry.get("about")
     if isinstance(about_id, dict):
         about_id = about_id.get("@id")
-    if about_id and about_id != doc_id:
+    if not about_id or about_id != doc_id:
         raise ValueError(
             f"Carried document identifier derivation mismatch: metadata about {about_id}, document @id {doc_id}"
         )
