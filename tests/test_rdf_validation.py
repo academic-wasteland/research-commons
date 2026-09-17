@@ -1,4 +1,5 @@
 import json
+import zipfile
 
 import pytest
 
@@ -93,6 +94,26 @@ def test_ro_crate_zip_archive_roundtrip(repository_root, tmp_path):
 
     recovered = from_crate(zip_path)
     assert recovered == task_doc
+
+
+@pytest.mark.parametrize(
+    "malicious_member",
+    [
+        "../secret.json",
+        "..\\secret.json",
+        "/etc/passwd",
+        "C:\\Windows\\system32\\calc.exe",
+        "nested/../../secret.json",
+    ],
+)
+def test_ro_crate_zip_archive_path_traversal_rejected(tmp_path, malicious_member):
+    zip_path = tmp_path / "malicious.crate.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr(malicious_member, "malicious payload")
+        zf.writestr("ro-crate-metadata.json", "{}")
+
+    with pytest.raises(ValueError, match="Insecure zip archive member"):
+        unpack_and_verify_crate(zip_path)
 
 
 

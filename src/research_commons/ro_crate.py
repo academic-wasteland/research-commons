@@ -146,13 +146,23 @@ def unpack_and_verify_crate(crate_source: str | Path) -> dict[str, Any]:
 
     if is_zip:
         temp_dir = Path(tempfile.mkdtemp(prefix="ro_crate_extract_"))
+        resolved_temp = temp_dir.resolve()
         try:
             with zipfile.ZipFile(source_path, "r") as zf:
-                # Safe extraction preventing path traversal from malicious zips
+                # Platform-independent safe extraction preventing Zip Slip traversal
                 for member in zf.infolist():
-                    member_path = Path(member.filename)
-                    if member_path.is_absolute() or ".." in member_path.parts:
-                        raise ValueError(f"Insecure zip archive member: {member.filename}")
+                    name = member.filename
+                    # Reject absolute paths, drives, UNC, or backslashes
+                    if "\\" in name or name.startswith("/") or ":" in name:
+                        raise ValueError(f"Insecure zip archive member: {name}")
+                    # Check parts for directory traversal
+                    parts = [p for p in name.replace("\\", "/").split("/") if p]
+                    if ".." in parts:
+                        raise ValueError(f"Insecure zip archive member: {name}")
+                    # Verify resolved path remains strictly within destination directory
+                    target_file = (resolved_temp / Path(*parts)).resolve()
+                    if not target_file.is_relative_to(resolved_temp):
+                        raise ValueError(f"Insecure zip archive member: {name}")
                 zf.extractall(temp_dir)
             return _unpack_and_verify_directory(temp_dir)
         finally:
