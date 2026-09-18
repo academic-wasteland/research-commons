@@ -267,6 +267,14 @@ def test_ro_crate_builder_and_serialization(repository_root, tmp_path):
 
     carried_file = json.loads(message_path.read_text(encoding="utf-8"))
     assert carried_file["@id"] == task_doc["@id"]
+    
+    # Check typing preservation of agent
+    action = next(e for e in metadata["@graph"] if e.get("@type") == "CreateAction")
+    agent = action.get("agent")
+    assert agent
+    agent_id = agent["@id"]
+    agent_entity = next(e for e in metadata["@graph"] if e.get("@id") == agent_id)
+    assert agent_entity["@type"] == "Person"
 
     # Carrier SHACL validation
     shacl_result = validate_crate_shacl(metadata)
@@ -478,6 +486,25 @@ def test_ro_crate_unpack_and_verify_success(repository_root, tmp_path, doc_fixtu
 
     unpacked_doc = unpack_and_verify_crate(crate_dir)
     assert unpacked_doc == original_doc
+
+def test_ro_crate_package_and_unpack_research_request(repository_root, tmp_path):
+    # Verify ResearchRequest logic explicitly
+    request_doc = load_json(repository_root / "examples/metagenomics/request.jsonld")
+    builder = ROCrateBuilder()
+    crate_dir = tmp_path / "request_crate"
+    builder.build_crate(request_doc, crate_dir)
+    
+    metadata_path = crate_dir / ROCrateBuilder.METADATA_FILENAME
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    
+    action = next(e for e in metadata["@graph"] if e.get("@type") == "CreateAction")
+    # For ResearchRequest (same as ResearchTask), rcp-message.jsonld should be an object
+    assert "object" in action
+    objects = action["object"] if isinstance(action["object"], list) else [action["object"]]
+    assert {"@id": ROCrateBuilder.MESSAGE_FILENAME} in objects
+
+    unpacked_doc = unpack_and_verify_crate(crate_dir)
+    assert unpacked_doc == request_doc
 
 
 @pytest.mark.parametrize(
@@ -965,8 +992,8 @@ def test_rdf_validation_pep562_dir_and_reexports():
     assert "unpack_and_verify_crate" in dir_names
 
 
-def test_ro_crate_unpack_crate_with_standard_root_action_id(repository_root, tmp_path):
-    """Test that a valid crate using '@id': '#action' (allowed by profile schema) recovers successfully."""
+def test_ro_crate_unpack_crate_with_standard_root_action_id_rejected(repository_root, tmp_path):
+    """Test that a crate using '@id': '#action' instead of a derived deterministic ID is rejected."""
     original_doc = load_json(repository_root / "examples/metagenomics/task.jsonld")
     builder = ROCrateBuilder()
     crate_dir = tmp_path / "root_action_crate"
@@ -979,8 +1006,12 @@ def test_ro_crate_unpack_crate_with_standard_root_action_id(repository_root, tmp
             entity["@id"] = "#action"
 
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
-    recovered = unpack_and_verify_crate(crate_dir)
-    assert recovered["@id"] == original_doc["@id"]
+    
+    with pytest.raises(
+        ValueError, 
+        match="(does not contain a valid carried RCP message file entity linked to CreateAction|failed SHACL shape validation|does not contain items matching the given schema)"
+    ):
+        unpack_and_verify_crate(crate_dir)
 
 
 def test_ro_crate_overwrite_flag_support(repository_root, tmp_path):

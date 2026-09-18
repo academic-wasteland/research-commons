@@ -183,7 +183,7 @@ def test_ro_crate_profile_schema_enforces_date_published_format(repository_root)
                 "about": {"@id": "https://example.org/task-1"},
             },
             {
-                "@id": "#action",
+                "@id": "#action-0123456789ab",
                 "@type": "CreateAction",
                 "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             },
@@ -198,7 +198,7 @@ def test_ro_crate_profile_schema_enforces_date_published_format(repository_root)
         validate_against(valid_crate, "ro-crate-rcp-profile.json")
 
     # Invalid datePublished format fails (e.g. invalid string or impossible calendar date)
-    for bad_date in ["not-a-valid-date", "2026-99-99T29:70:70Z", "2026-02-31"]:
+    for bad_date in ["not-a-valid-date", "2026-99-99T29:70:70Z", "2026-02-31", "2026-W38-4"]:
         invalid_graph = [
             {
                 "@id": "ro-crate-metadata.json",
@@ -224,7 +224,7 @@ def test_ro_crate_profile_schema_enforces_date_published_format(repository_root)
                 "about": {"@id": "https://example.org/task-1"},
             },
             {
-                "@id": "#action",
+                "@id": "#action-0123456789ab",
                 "@type": "CreateAction",
                 "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             },

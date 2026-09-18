@@ -137,15 +137,17 @@ def build_crate(
             action_entity,
         ]
 
-        agent_info = message_doc.get("producedBy") or message_doc.get("requestedBy")
+        agent_info = message_doc.get("producedBy") or message_doc.get("requestedBy") or message_doc.get("completed_by") or message_doc.get("creator") or message_doc.get("agent")
         if isinstance(agent_info, dict) and agent_info.get("@id"):
             raw_type = agent_info.get("@type")
             if isinstance(raw_type, list):
-                entity_type = raw_type if raw_type else "Agent"
+                entity_type = raw_type if raw_type else "Person"
             elif isinstance(raw_type, str):
                 entity_type = raw_type
             else:
-                entity_type = "Agent"
+                entity_type = "Person"
+            if entity_type not in ("Person", "Organization") and (not isinstance(entity_type, list) or not set(entity_type).intersection({"Person", "Organization"})):
+                entity_type = "Person"
             graph.append(
                 {
                     "@id": agent_info["@id"],
@@ -408,11 +410,14 @@ class ROCrateBuilder:
         return build_crate(rcp_message, output_target, workflow_tool=workflow_tool, overwrite=overwrite)
 
 
-def _derive_action_id(msg_id: str) -> str:
+def _derive_action_id(msg_id: str | None) -> str:
     if msg_id:
         hashed_id = hashlib.sha256(msg_id.encode("utf-8")).hexdigest()[:12]
         return f"#action-{hashed_id}"
-    return "#action"
+    
+    # If msg_id is empty, use a fixed hash for the empty string to satisfy the pattern
+    hashed_id = hashlib.sha256(b"").hexdigest()[:12]
+    return f"#action-{hashed_id}"
 
 
 def _assemble_action_entity(
@@ -425,6 +430,7 @@ def _assemble_action_entity(
 ) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
     is_contribution = "ResearchContribution" in types or f"{RCP}ResearchContribution" in types
     is_task = "ResearchTask" in types or f"{RCP}ResearchTask" in types
+    is_request = "ResearchRequest" in types or f"{RCP}ResearchRequest" in types
 
     action_id = _derive_action_id(msg_id)
     action_name = f"Execution of {msg_id}" if msg_id else "RCP Carrier Execution"
@@ -432,7 +438,7 @@ def _assemble_action_entity(
     objects: list[dict[str, str]] = []
     results: list[dict[str, str]] = []
 
-    if is_task:
+    if is_task or is_request:
         objects.append({"@id": MESSAGE_FILENAME})
         for ds in rcp_message.get("usesDataset", []):
             ds_id = ds.get("@id") if isinstance(ds, dict) else ds
@@ -467,7 +473,7 @@ def _assemble_action_entity(
     elif isinstance(instrument, str):
         action_entity["instrument"] = {"@id": instrument}
 
-    agent_info = rcp_message.get("producedBy") or rcp_message.get("requestedBy")
+    agent_info = rcp_message.get("producedBy") or rcp_message.get("requestedBy") or rcp_message.get("completed_by") or rcp_message.get("creator") or rcp_message.get("agent")
     if isinstance(agent_info, dict) and agent_info.get("@id"):
         action_entity["agent"] = {"@id": agent_info["@id"]}
 
@@ -540,7 +546,10 @@ def _locate_carried_file(
             types = [entity_type] if isinstance(entity_type, str) else list(entity_type)
             is_file = "File" in types or "http://schema.org/MediaObject" in types
             has_digest = isinstance(entity.get("digest"), str)
-            is_jsonld = entity.get("encodingFormat") == "application/ld+json" or entity_id.endswith(".jsonld")
+            encoding = entity.get("encodingFormat", "")
+            is_jsonld = isinstance(encoding, str) and (
+                encoding == "application/ld+json" or encoding.startswith("application/ld+json;")
+            )
             is_action_ref = entity_id in action_file_refs
             is_root_part = not root_parts or entity_id in root_parts
 
@@ -557,7 +566,7 @@ def _locate_carried_file(
             # Enforce deterministic action derivation per ADR 0002
             expected_action_id = _derive_action_id(about_id)
             matching_action = any(
-                a.get("@id") in {expected_action_id, "#action"}
+                a.get("@id") == expected_action_id
                 and entity_id in _extract_action_file_refs([a])
                 for a in carrier_actions
             )
@@ -674,7 +683,7 @@ def _validate_carried_doc(
         )
 
     # Verify that at least one CreateAction references this carried file
-    # Accepts either the deterministic derived ID (#action-<12hex>) or root '#action'
+    # Accepts only the deterministic derived ID (#action-<12hex>)
     expected_action_id = _derive_action_id(doc_id)
     referencing_actions = [
         action
@@ -685,11 +694,8 @@ def _validate_carried_doc(
         raise ValueError(
             f"No CreateAction entity found referencing carried file {carried_file_id}"
         )
-    if not any(
-        action.get("@id") in {expected_action_id, "#action"}
-        for action in referencing_actions
-    ):
+    if not any(action.get("@id") == expected_action_id for action in referencing_actions):
         actual_ids = [action.get("@id") for action in referencing_actions]
         raise ValueError(
-            f"CreateAction identifier derivation mismatch: expected {expected_action_id} or '#action', found {actual_ids}"
+            f"CreateAction identifier derivation mismatch: expected {expected_action_id}, found {actual_ids}"
         )

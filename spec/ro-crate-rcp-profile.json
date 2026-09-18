@@ -196,7 +196,7 @@
       "properties": {
         "@id": {
           "type": "string",
-          "pattern": "^#action(-[0-9a-f]{12})?$",
+          "pattern": "^#action-[0-9a-f]{12}$",
           "description": "Carrier action identifier conforming to deterministic ADR 0002 derivation"
         },
         "@type": {
