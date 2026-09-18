@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/research-commons/v0.1/ro-crate-rcp-profile.json",
+  "title": "RCP RO-Crate Carrier Profile",
+  "description": "Profile definition for carrying Research Commons Protocol (RCP) messages inside RO-Crates per ADR 0002.",
+  "type": "object",
+  "required": ["@context", "@graph"],
+  "properties": {
+    "@context": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "https://w3id.org/ro/crate/1.1/context",
+              "https://w3id.org/research-commons/v0.1/context.jsonld"
+            ]
+          },
+          {
+            "type": "object"
+          }
+        ]
+      },
+      "allOf": [
+        {
+          "contains": {
+            "const": "https://w3id.org/ro/crate/1.1/context"
+          }
+        },
+        {
+          "contains": {
+            "const": "https://w3id.org/research-commons/v0.1/context.jsonld"
+          }
+        }
+      ]
+    },
+    "@graph": {
+      "type": "array",
+      "allOf": [
+        {
+          "contains": {
+            "$ref": "#/definitions/metadataDescriptor"
+          }
+        },
+        {
+          "contains": {
+            "$ref": "#/definitions/rootDataEntity"
+          }
+        },
+        {
+          "contains": {
+            "$ref": "#/definitions/carriedFile"
+          }
+        },
+        {
+          "contains": {
+            "$ref": "#/definitions/createAction"
+          }
+        }
+      ],
+      "items": {
+        "type": "object",
+        "required": ["@id", "@type"],
+        "properties": {
+          "@id": {"type": "string"},
+          "@type": {
+            "oneOf": [
+              {"type": "string"},
+              {"type": "array", "items": {"type": "string"}}
+            ]
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "profileMapping": {
+      "description": "Mapping definitions of base entities to standard RO-Crate 1.1 definitions and RCP context terms",
+      "baseEntities": {
+        "Dataset": "http://schema.org/Dataset",
+        "File": "http://schema.org/MediaObject",
+        "CreateAction": "http://schema.org/CreateAction",
+        "SoftwareApplication": "http://schema.org/SoftwareApplication"
+      },
+      "contextCompatibility": {
+        "contextIri": "https://w3id.org/research-commons/v0.1/context.jsonld",
+        "coexistenceNotes": "Maps RCP-specific terms alongside RO-Crate 1.1 context (https://w3id.org/ro/crate/1.1/context). Carrier file uses 'File' ('http://schema.org/MediaObject') and carries rcp:digest ('https://w3id.org/research-commons/v0.1/digest')."
+      }
+    },
+    "canonicalDigestSlot": {
+      "property": "digest",
+      "iri": "https://w3id.org/research-commons/v0.1/digest",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Slot for storing a canonical SHA-256 digest of the carried JSON-LD message per ADR 0002"
+    },
+    "metadataDescriptor": {
+      "type": "object",
+      "required": ["@id", "@type", "about", "conformsTo"],
+      "properties": {
+        "@id": {"const": "ro-crate-metadata.json"},
+        "@type": {
+          "oneOf": [
+            {"const": "CreativeWork"},
+            {"type": "array", "contains": {"const": "CreativeWork"}}
+          ]
+        },
+        "about": {
+          "type": "object",
+          "required": ["@id"],
+          "properties": {
+            "@id": {"const": "./"}
+          }
+        },
+        "conformsTo": {
+          "description": "Reference to RO-Crate specification version",
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["@id"],
+              "properties": {
+                "@id": {"const": "https://w3id.org/ro/crate/1.1"}
+              }
+            },
+            {
+              "type": "array",
+              "contains": {
+                "type": "object",
+                "required": ["@id"],
+                "properties": {
+                  "@id": {"const": "https://w3id.org/ro/crate/1.1"}
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "rootDataEntity": {
+      "type": "object",
+      "required": ["@id", "@type", "hasPart", "conformsTo", "datePublished"],
+      "properties": {
+        "@id": {"const": "./"},
+        "@type": {
+          "oneOf": [
+            {"const": "Dataset"},
+            {"type": "array", "contains": {"const": "Dataset"}}
+          ]
+        },
+        "datePublished": {
+          "description": "Publication date in ISO-8601 format",
+          "type": "string",
+          "anyOf": [
+            {"format": "date"},
+            {"format": "date-time"}
+          ]
+        },
+        "conformsTo": {
+          "description": "Reference to RO-Crate profile URIs",
+          "type": "array",
+          "contains": {
+            "type": "object",
+            "required": ["@id"],
+            "properties": {
+              "@id": {"const": "https://w3id.org/research-commons/v0.1/ro-crate-rcp-profile.json"}
+            }
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "license": {
+          "type": "object",
+          "required": ["@id"],
+          "properties": {
+            "@id": {"type": "string"}
+          }
+        },
+        "hasPart": {
+          "type": "array",
+          "description": "Must link to data entities including the carried RCP JSON-LD document",
+          "minItems": 1
+        },
+        "mentions": {
+          "description": "Reference to CreateAction execution entities"
+        }
+      }
+    },
+    "createAction": {
+      "type": "object",
+      "required": ["@id", "@type", "digest"],
+      "properties": {
+        "@id": {
+          "type": "string",
+          "pattern": "^#action-[0-9a-f]{12}$",
+          "description": "Carrier action identifier conforming to deterministic ADR 0002 derivation"
+        },
+        "@type": {
+          "oneOf": [
+            {"const": "CreateAction"},
+            {"type": "array", "contains": {"const": "CreateAction"}}
+          ]
+        },
+        "agent": {"description": "Agent executing the action"},
+        "instrument": {"description": "SoftwareApplication or tool executed"},
+        "object": {"description": "Inputs to the action, including carried task message or datasets"},
+        "result": {"description": "Outputs of the action, including carried contribution message or artifacts"},
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Canonical SHA-256 digest of the carried JSON-LD message"
+        }
+      }
+    },
+    "carriedFile": {
+      "type": "object",
+      "required": ["@id", "@type", "encodingFormat", "digest", "about"],
+      "properties": {
+        "@id": {"type": "string"},
+        "@type": {
+          "oneOf": [
+            {"const": "File"},
+            {"type": "array", "contains": {"const": "File"}}
+          ]
+        },
+        "encodingFormat": {"const": "application/ld+json"},
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Canonical SHA-256 digest of the carried JSON-LD message"
+        },
+        "about": {
+          "oneOf": [
+            {"type": "string"},
+            {
+              "type": "object",
+              "required": ["@id"],
+              "properties": {
+                "@id": {"type": "string"}
+              }
+            }
+          ],
+          "description": "Subject reference to the carried RCP document @id"
+        }
+      }
+    }
+  }
+}

@@ -1,6 +1,7 @@
 @prefix rcp: <https://w3id.org/research-commons/v0.1/> .
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix schema: <http://schema.org/> .
 
 rcp:ResearchTaskShape a sh:NodeShape ;
   sh:targetClass rcp:ResearchTask ;
@@ -23,3 +24,113 @@ rcp:ClaimShape a sh:NodeShape ;
   sh:property [ sh:path rcp:subject ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
   sh:property [ sh:path rcp:predicate ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
   sh:property [ sh:path rcp:object ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+rcp:MetadataDescriptorShape a sh:NodeShape ;
+  sh:targetClass schema:CreativeWork ;
+  sh:sparql [
+    sh:message "Metadata descriptor must conform to RO-Crate and describe the root data entity." ;
+    sh:prefixes [
+      sh:declare [
+        sh:prefix "schema" ;
+        sh:namespace "http://schema.org/"^^xsd:anyURI ;
+      ]
+    ] ;
+    sh:select """
+      SELECT $this ?root WHERE {
+        $this a schema:CreativeWork ;
+              schema:about ?root .
+        FILTER (STR($this) = "ro-crate-metadata.json" || STRENDS(STR($this), "/ro-crate-metadata.json"))
+        FILTER NOT EXISTS {
+          ?root a schema:Dataset ;
+                schema:hasPart ?part .
+        }
+      }
+    """ ;
+  ] ;
+  sh:sparql [
+    sh:message "RO-Crate Root Data Entity must explicitly link to parts including the carried RCP JSON-LD file." ;
+    sh:prefixes [
+      sh:declare [
+        sh:prefix "schema" ;
+        sh:namespace "http://schema.org/"^^xsd:anyURI ;
+      ] , [
+        sh:prefix "rcp" ;
+        sh:namespace "https://w3id.org/research-commons/v0.1/"^^xsd:anyURI ;
+      ]
+    ] ;
+    sh:select """
+      SELECT $this ?root WHERE {
+        $this a schema:CreativeWork ;
+              schema:about ?root .
+        FILTER (STR($this) = "ro-crate-metadata.json" || STRENDS(STR($this), "/ro-crate-metadata.json"))
+        FILTER NOT EXISTS {
+          ?root schema:hasPart ?file .
+          ?file a schema:MediaObject ;
+                schema:encodingFormat "application/ld+json" ;
+                rcp:digest ?digest ;
+                schema:about ?msgId .
+          { ?action schema:object ?file } UNION { ?action schema:result ?file }
+          ?action a schema:CreateAction .
+        }
+      }
+    """ ;
+  ] .
+
+rcp:RootDataEntityShape a sh:NodeShape ;
+  sh:target [
+    a sh:SPARQLTarget ;
+    sh:prefixes [
+      sh:declare [
+        sh:prefix "schema" ;
+        sh:namespace "http://schema.org/"^^xsd:anyURI ;
+      ]
+    ] ;
+    sh:select """
+      SELECT ?this WHERE {
+        ?desc a schema:CreativeWork ;
+              schema:about ?this .
+        ?this a schema:Dataset .
+        FILTER (STR(?desc) = "ro-crate-metadata.json" || STRENDS(STR(?desc), "/ro-crate-metadata.json"))
+      }
+    """ ;
+  ] ;
+  sh:property [
+    sh:path schema:hasPart ;
+    sh:minCount 1 ;
+  ] .
+
+rcp:CreateActionCarrierShape a sh:NodeShape ;
+  sh:target [
+    a sh:SPARQLTarget ;
+    sh:prefixes [
+      sh:declare [
+        sh:prefix "schema" ;
+        sh:namespace "http://schema.org/"^^xsd:anyURI ;
+      ]
+    ] ;
+    sh:select """
+      SELECT ?this WHERE {
+        ?this a schema:CreateAction .
+        ?desc a schema:CreativeWork ;
+              schema:about ?root .
+        FILTER (STR(?desc) = "ro-crate-metadata.json" || STRENDS(STR(?desc), "/ro-crate-metadata.json"))
+        ?root schema:hasPart ?file .
+        ?file a schema:MediaObject ;
+              schema:encodingFormat "application/ld+json" .
+        { ?this schema:object ?file } UNION { ?this schema:result ?file }
+      }
+    """ ;
+  ] ;
+  sh:property [
+    sh:path [ sh:alternativePath ( schema:object schema:result ) ] ;
+    sh:minCount 1 ;
+    sh:message "CreateAction must explicitly link to the carried RCP JSON-LD file." ;
+  ] ;
+  sh:property [
+    sh:path rcp:digest ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:datatype xsd:string ;
+    sh:pattern "^sha256:[0-9a-f]{64}$" ;
+    sh:message "CreateAction must contain a valid canonical sha256 digest string." ;
+  ] .

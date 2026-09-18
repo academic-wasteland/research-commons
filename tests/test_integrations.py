@@ -1,6 +1,9 @@
+import subprocess
+import sys
 import tomllib
 from itertools import pairwise
 
+from research_commons.rdf_validation import unpack_and_verify_crate
 from research_commons.schema import load_json, validate_against
 
 REQUIRED_STEP_ORDER = [
@@ -79,3 +82,39 @@ def test_wasteland_example_sql_has_three_upserts(repository_root):
     ]
     assert [line.split("`")[1] for line in statements] == ["wanted", "completions", "stamps"]
     assert all("ON DUPLICATE KEY UPDATE" in line for line in statements)
+
+def test_end_to_end_artifact_production(repository_root, tmp_path):
+    """E2E test verifying a full workflow: take a contribution, convert to completion, build RO-Crate carrier, and verify."""
+    contribution_path = repository_root / "examples/metagenomics/contribution.jsonld"
+    contribution_doc = load_json(contribution_path)
+    
+    # 1. Complete the task using the CLI to-completion (with automatically generated crate)
+    crate_out = tmp_path / "end_to_end_crate.zip"
+    producer = "did:key:z6MkuV8zD6H7338C"
+    
+    cmd = [
+        sys.executable,
+        "-m",
+        "research_commons.cli",
+        "to-completion",
+        str(contribution_path),
+        "--completed-by",
+        producer,
+        "--crate-out",
+        str(crate_out),
+    ]
+    subprocess.run(cmd, capture_output=True, text=True, check=True)
+    
+    # 2. Assert crate was created
+    assert crate_out.is_file()
+    assert crate_out.stat().st_size > 0
+    
+    # 3. Unpack and verify the crate payload natively
+    recovered_doc = unpack_and_verify_crate(crate_out)
+    
+    # 4. Assert the recovered doc is a ResearchContribution
+    assert any(t in ("ResearchContribution", "https://w3id.org/research-commons/v0.1/ResearchContribution") for t in (recovered_doc.get("@type", []) if isinstance(recovered_doc.get("@type"), list) else [recovered_doc.get("@type")]))
+    assert recovered_doc.get("usesTask") == contribution_doc.get("usesTask")
+    
+    # Check that the producer was correctly set
+    assert recovered_doc.get("producedBy", {}).get("@id") == contribution_doc.get("producedBy", {}).get("@id")
