@@ -43,6 +43,10 @@
       "items": {
         "type": "object",
         "required": ["@id", "@type"],
+        "not": {
+          "description": "Entities must not carry their own @context",
+          "required": ["@context"]
+        },
         "properties": {
           "@id": {"type": "string"},
           "@type": {
@@ -57,7 +61,7 @@
   },
   "definitions": {
     "profileMapping": {
-      "description": "Mapping definitions of base entities to standard RO-Crate 1.1 definitions and RCP context terms",
+      "description": "Mapping definitions of base entities to standard RO-Crate 1.1 definitions and the RCP prefix and digest term of the carrier context",
       "baseEntities": {
         "Dataset": "http://schema.org/Dataset",
         "File": "http://schema.org/MediaObject",
@@ -144,7 +148,7 @@
           ]
         },
         "conformsTo": {
-          "description": "Reference to RO-Crate profile URIs",
+          "description": "Reference to RO-Crate profile URIs: RO-Crate 1.1 and this carrier profile, plus Process Run Crate 0.5 (https://w3id.org/ro/wfrun/process/0.5) when the CreateAction has an instrument; each referenced profile is also described as a CreativeWork entity in @graph",
           "type": "array",
           "contains": {
             "type": "object",
@@ -217,6 +221,7 @@
         "encodingFormat": {
           "type": "string",
           "pattern": "^application/ld\\+json(;.*)?$",
+          "not": {"pattern": "[\\r\\n]"},
           "description": "JSON-LD media type, optionally with parameters such as profile"
         },
         "digest": {

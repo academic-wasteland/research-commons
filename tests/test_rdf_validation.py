@@ -138,7 +138,7 @@ def test_ro_crate_failed_build_cleans_up_staged_output(repository_root, tmp_path
     crate_dir = tmp_path / "staged_fail_crate"
 
     # Build should fail validation
-    with pytest.raises(ValueError, match="Unsupported external context"):
+    with pytest.raises(ValueError, match="Unsupported external context|Nested @context|must not carry their own @context|should not be valid under"):
         builder.build_crate(task_doc, crate_dir, workflow_tool=bad_workflow_tool)
 
     # Output directory must not exist or must remain completely empty so retry succeeds
@@ -166,7 +166,7 @@ def test_ro_crate_builder_with_tool_unapproved_context_rejected(repository_root,
     builder = ROCrateBuilder()
     crate_dir = tmp_path / "bad_tool_crate"
 
-    with pytest.raises(ValueError, match="Unsupported external context"):
+    with pytest.raises(ValueError, match="Unsupported external context|Nested @context|must not carry their own @context|should not be valid under"):
         builder.build_crate(task_doc, crate_dir, workflow_tool=workflow_tool)
 
 
@@ -205,7 +205,7 @@ def test_ro_crate_graph_nested_remote_context_rejected(repository_root, tmp_path
         if entity.get("@id") == "./":
             entity["@context"] = "https://attacker.invalid/injected.jsonld"
 
-    with pytest.raises(ValueError, match="Unsupported external context"):
+    with pytest.raises(ValueError, match="Unsupported external context|Nested @context|must not carry their own @context|should not be valid under"):
         ro_crate_graph(metadata)
 
 
@@ -234,7 +234,7 @@ def test_ro_crate_graph_unsupported_context_rejected(repository_root, tmp_path):
     # Attacker appends an overriding context
     metadata["@context"].append("https://attacker.invalid/context.jsonld")
 
-    with pytest.raises(ValueError, match="Unsupported external context"):
+    with pytest.raises(ValueError, match="Unsupported external context|Nested @context|must not carry their own @context|should not be valid under"):
         ro_crate_graph(metadata)
 
 

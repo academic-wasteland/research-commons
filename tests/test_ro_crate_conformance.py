@@ -3,7 +3,13 @@
 These tests check generated crates without the repository's own context handling in
 `ro_crate_graph`: the RO-Crate validator (roc-validator) resolves contexts itself, and
 the RDF checks parse the metadata exactly as written, with only the RO-Crate 1.1
-context IRI replaced by its vendored copy (the same published document).
+context IRI replaced by its vendored copy (the same published document). The RDF
+helper deliberately does not reuse `ro_crate_graph`, to stay independent of it.
+
+The roc-validator tests need network access (the validator fetches the RO-Crate
+context and profile resources from w3id.org) and cache them under
+`$XDG_CACHE_HOME/rocrate-validator` (default `~/.cache/rocrate-validator`). They are
+not skipped offline on purpose: they are the independent conformance evidence.
 """
 
 import json
@@ -25,6 +31,7 @@ from research_commons.constants import (
     RO_CRATE_BASE_CONTEXT,
     RO_CRATE_CONTEXT_IRI,
 )
+from research_commons.rdf_validation import ro_crate_graph
 from research_commons.ro_crate import build_crate, unpack_and_verify_crate
 from research_commons.schema import (
     StructuralValidationError,
@@ -62,14 +69,18 @@ def _graph_as_written(metadata: dict[str, Any]) -> Graph:
     return graph
 
 
-def _roc_validate(crate_dir: Path, profile: str) -> list[str]:
+def _roc_validate(crate_dir: Path, profile: str, severity: Severity = Severity.REQUIRED) -> list[str]:
     settings = services.ValidationSettings(
         rocrate_uri=str(crate_dir.resolve()),
         profile_identifier=profile,
-        requirement_severity=Severity.REQUIRED,
+        requirement_severity=severity,
     )
     result = services.validate(settings)
-    return [f"{issue.check.identifier}: {issue.message}" for issue in result.get_issues()]
+    # Guard against a vacuous pass (e.g. a validator that skipped its checks)
+    assert result.executed_checks, f"roc-validator executed no checks for {profile}"
+    issues = [f"{issue.check.identifier}: {issue.message}" for issue in result.get_issues()]
+    assert result.passed() == (not issues)
+    return issues
 
 
 def test_crate_context_is_self_contained(repository_root, tmp_path):
@@ -109,6 +120,11 @@ def test_crate_terms_keep_ro_crate_meaning(repository_root, tmp_path):
         ("Person", ["Person", "rcp:Person"]),
         (f"{RCP}Organization", ["Organization", "rcp:Organization"]),
         (["Agent", "https://example.org/Robot"], ["rcp:Agent", "https://example.org/Robot"]),
+        ("urn:example:robot", "urn:example:robot"),
+        # Not RCP terms: undefined in the RCP context, so not reinterpreted by RO-Crate's
+        (["Agent", "SoftwareApplication"], "rcp:Agent"),
+        ("SoftwareApplication", "Thing"),
+        ("schema:Person", "Thing"),
     ],
 )
 def test_crate_preserves_producer_type(repository_root, tmp_path, source_type, expected):
@@ -142,6 +158,27 @@ def test_recovery_rejects_altered_carrier_context(repository_root, tmp_path):
         unpack_and_verify_crate(crate_dir)
 
 
+@pytest.mark.parametrize(
+    "path",
+    [("@graph", 2), ("@graph", 2, "about")],
+    ids=["entity", "nested-value"],
+)
+def test_recovery_rejects_nested_context(repository_root, tmp_path, path):
+    """Nested contexts are rejected (each would expand to the full RO-Crate context)."""
+    crate_dir = build_crate(load_json(repository_root / "examples/metagenomics/task.jsonld"), tmp_path / "c")
+    metadata = _metadata(crate_dir)
+    target: Any = metadata
+    for key in path:
+        target = target[key]
+    target["@context"] = RO_CRATE_CONTEXT_IRI
+    _write_metadata(crate_dir, metadata)
+
+    with pytest.raises((StructuralValidationError, ValueError), match="@context|Nested"):
+        unpack_and_verify_crate(crate_dir)
+    with pytest.raises(ValueError, match="Nested @context"):
+        ro_crate_graph(metadata)
+
+
 def test_recovery_accepts_parameterized_json_ld_media_type(repository_root, tmp_path):
     task = load_json(repository_root / "examples/metagenomics/task.jsonld")
     crate_dir = build_crate(task, tmp_path / "c")
@@ -153,11 +190,12 @@ def test_recovery_accepts_parameterized_json_ld_media_type(repository_root, tmp_
     assert unpack_and_verify_crate(crate_dir) == task
 
 
-def test_recovery_rejects_other_media_type(repository_root, tmp_path):
+@pytest.mark.parametrize("media_type", ["application/ld+jsonx", "application/ld+json\n", "application/ld+json;\nx"])
+def test_recovery_rejects_other_media_type(repository_root, tmp_path, media_type):
     crate_dir = build_crate(load_json(repository_root / "examples/metagenomics/task.jsonld"), tmp_path / "c")
     metadata = _metadata(crate_dir)
     carried = next(e for e in metadata["@graph"] if e.get("@id") == "rcp-message.jsonld")
-    carried["encodingFormat"] = "application/ld+jsonx"
+    carried["encodingFormat"] = media_type
     _write_metadata(crate_dir, metadata)
 
     with pytest.raises(StructuralValidationError):
@@ -199,13 +237,40 @@ def test_roc_validator_process_run_crate(repository_root, tmp_path):
     assert _roc_validate(crate_dir, ROC_VALIDATOR_PROCESS_RUN_PROFILE) == []
 
 
+# SHOULD-level findings of roc-validator 0.11.4 on the example crates, accepted for now.
+# 8.6 follows from keeping the producer type (an rcp:Agent is no Person/Organization),
+# 11.1 from task crates having no result yet; 3.2 and 4.1 concern the caller's tool.
+KNOWN_RECOMMENDED_DEVIATIONS = {
+    "ro-crate-1.1_22.1",
+    "ro-crate-1.1_22.2",
+    "ro-crate-1.1_22.3",
+    "ro-crate-1.1_24.1",
+    "process-run-crate-0.5_3.2",
+    "process-run-crate-0.5_4.1",
+    "process-run-crate-0.5_8.3",
+    "process-run-crate-0.5_8.4",
+    "process-run-crate-0.5_8.6",
+    "process-run-crate-0.5_10.1",
+    "process-run-crate-0.5_11.1",
+}
+
+
+@pytest.mark.parametrize("message", ["task.jsonld", "contribution.jsonld"])
+def test_roc_validator_recommended_level_has_no_new_deviations(repository_root, tmp_path, message):
+    crate_dir = build_crate(
+        (repository_root / "examples/metagenomics" / message).read_bytes(), tmp_path / "c", workflow_tool=TOOL
+    )
+    issues = _roc_validate(crate_dir, ROC_VALIDATOR_PROCESS_RUN_PROFILE, Severity.RECOMMENDED)
+    assert {issue.split(":", 1)[0] for issue in issues} <= KNOWN_RECOMMENDED_DEVIATIONS, issues
+
+
 def test_roc_validator_rejects_process_run_crate_without_instrument(repository_root, tmp_path):
     """Control: the validator profile is real and does check Process Run requirements."""
     crate_dir = build_crate((repository_root / "examples/metagenomics/task.jsonld").read_bytes(), tmp_path / "c")
     assert _roc_validate(crate_dir, ROC_VALIDATOR_PROCESS_RUN_PROFILE) != []
 
 
-@pytest.mark.parametrize("document", ["[1, 2]", '{"@type": [1]}', '"text"'])
+@pytest.mark.parametrize("document", ["[1, 2]", '{"@type": [1]}', '"text"', "{"])
 def test_to_completion_reports_malformed_input(tmp_path, document):
     source = tmp_path / "doc.jsonld"
     source.write_text(document, encoding="utf-8")

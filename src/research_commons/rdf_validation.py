@@ -63,36 +63,37 @@ def _validate_and_resolve_context_element(ctx: Any) -> Any:
     raise TypeError(f"Unsupported context entry in RO-Crate metadata: {ctx!r}")
 
 
-def _recursively_sanitize_contexts(node: Any) -> Any:
+def _reject_nested_contexts(node: Any) -> None:
     if isinstance(node, dict):
-        sanitized = {}
-        for key, val in node.items():
-            if key == "@context":
-                if isinstance(val, list):
-                    sanitized[key] = [_validate_and_resolve_context_element(elem) for elem in val]
-                else:
-                    sanitized[key] = _validate_and_resolve_context_element(val)
-            else:
-                sanitized[key] = _recursively_sanitize_contexts(val)
-        return sanitized
-    if isinstance(node, list):
-        return [_recursively_sanitize_contexts(item) for item in node]
-    return node
+        if "@context" in node:
+            raise ValueError("Nested @context is not allowed in RO-Crate carrier metadata")
+        for val in node.values():
+            _reject_nested_contexts(val)
+    elif isinstance(node, list):
+        for item in node:
+            _reject_nested_contexts(item)
 
 
 def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
     """Build RDF Graph for an RO-Crate metadata document.
 
-    Only the RO-Crate 1.1 context IRI (resolved from its vendored copy) and the inline
-    carrier context are accepted, at the top level and in nested entities; any other
-    context entry is rejected, so parsing never fetches remote contexts and the graph
-    has the same term definitions a standard JSON-LD processor would use.
+    Only a top-level @context made of the RO-Crate 1.1 context IRI (resolved from its
+    vendored copy) and the inline carrier context is accepted; nested @context entries
+    and any other context are rejected. Parsing therefore never fetches remote contexts,
+    cannot be inflated by repeated context expansion, and uses the same term definitions
+    a standard JSON-LD processor would use.
     """
     declared_context = metadata.get("@context")
     if not isinstance(declared_context, list):
         raise TypeError("RO-Crate metadata must have a list @context")
 
-    expanded = _recursively_sanitize_contexts(metadata)
+    for key, val in metadata.items():
+        if key != "@context":
+            _reject_nested_contexts(val)
+    expanded = {
+        **metadata,
+        "@context": [_validate_and_resolve_context_element(elem) for elem in declared_context],
+    }
     graph = Graph()
     graph.parse(data=json.dumps(expanded), format="json-ld")
     return graph

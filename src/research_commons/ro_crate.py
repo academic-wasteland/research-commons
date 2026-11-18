@@ -17,6 +17,7 @@ from typing import Any
 
 from .constants import (
     CARRIER_CONTEXT,
+    COMPACT_IRIS,
     PROCESS_RUN_PROFILE,
     RCP,
     RO_CRATE_CONTEXT_IRI,
@@ -146,14 +147,14 @@ def build_crate(
 
         agent_info = message_doc.get("producedBy") or message_doc.get("requestedBy") or message_doc.get("completed_by") or message_doc.get("creator") or message_doc.get("agent")
         if isinstance(agent_info, dict) and agent_info.get("@id"):
-            agent_entity: dict[str, Any] = {
-                "@id": agent_info["@id"],
-                "name": agent_info.get("name", "Agent"),
-            }
             agent_types = _crate_agent_types(agent_info.get("@type"))
-            if agent_types:
-                agent_entity["@type"] = agent_types[0] if len(agent_types) == 1 else agent_types
-            graph.append(agent_entity)
+            graph.append(
+                {
+                    "@id": agent_info["@id"],
+                    "@type": agent_types[0] if len(agent_types) == 1 else agent_types,
+                    "name": agent_info.get("name", "Agent"),
+                }
+            )
 
         if instrument_entity is not None:
             graph.append(instrument_entity)
@@ -411,13 +412,8 @@ _PROFILE_NAMES = {
     PROFILE_ID: ("Research Commons Protocol RO-Crate carrier profile", "0.1"),
 }
 
-# RCP actor types that have a schema.org counterpart in the RO-Crate 1.1 context
-_SCHEMA_ACTOR_TYPES = {
-    "Person": "Person",
-    f"{RCP}Person": "Person",
-    "Organization": "Organization",
-    f"{RCP}Organization": "Organization",
-}
+# RCP actor types whose schema.org namesake is defined by the RO-Crate 1.1 context
+_SCHEMA_ACTOR_TYPES = {"Person", "Organization"}
 
 
 def _profile_entity(profile_id: str) -> dict[str, Any]:
@@ -428,30 +424,27 @@ def _profile_entity(profile_id: str) -> dict[str, Any]:
 def _crate_agent_types(raw_type: Any) -> list[str]:
     """Map the producer's RCP types onto crate types without changing their meaning.
 
-    Every RCP type keeps its RCP IRI via the carrier context's `rcp` prefix (e.g. Agent,
-    a sibling of Person rather than a subtype, stays `rcp:Agent`). RCP Person and
-    Organization additionally get the schema.org type of the RO-Crate context, which
-    RO-Crate consumers expect for agents. Absolute IRIs are kept as they are.
+    RCP terms (compact names from the RCP context, or full RCP IRIs) keep their RCP IRI
+    via the carrier context's `rcp` prefix (e.g. Agent, a sibling of Person rather than a
+    subtype, stays `rcp:Agent`); RCP Person and Organization additionally get the
+    schema.org type of the RO-Crate context, which RO-Crate consumers expect for agents.
+    Absolute IRIs (`scheme://...` or `urn:...`) are kept as they are. Other strings have
+    no defined meaning in the RCP context and are dropped rather than reinterpreted by
+    the RO-Crate context; if nothing is left, the agent is a generic `Thing`.
     """
     values = raw_type if isinstance(raw_type, list) else [raw_type]
     mapped: list[str] = []
     for value in values:
         if not isinstance(value, str) or not value:
             continue
-        if value.startswith(RCP):
-            local_name = value[len(RCP):]
-        elif ":" not in value:
-            local_name = value
-        else:
-            local_name = None
-        crate_types = [value] if local_name is None else [f"rcp:{local_name}"]
-        if value in _SCHEMA_ACTOR_TYPES:
-            crate_types.insert(0, _SCHEMA_ACTOR_TYPES[value])
-        for crate_type in crate_types:
-            if crate_type in mapped:
-                continue
-            mapped.append(crate_type)
-    return mapped
+        local_name = value.removeprefix(RCP)
+        if local_name in COMPACT_IRIS:
+            if local_name in _SCHEMA_ACTOR_TYPES:
+                mapped.append(local_name)
+            mapped.append(f"rcp:{local_name}")
+        elif "://" in value or value.startswith("urn:"):
+            mapped.append(value)
+    return list(dict.fromkeys(mapped)) or ["Thing"]
 
 
 def _derive_action_id(msg_id: str | None) -> str:
