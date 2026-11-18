@@ -197,8 +197,9 @@ def _ledger(arguments: argparse.Namespace) -> int:
     if arguments.command == "to-completion":
         raw_bytes = arguments.document.read_bytes()
         doc = json.loads(raw_bytes.decode("utf-8"))
-        if "ResearchContribution" not in doc.get("@type", []) and doc.get("@type") != "ResearchContribution" and not any(t.endswith("ResearchContribution") for t in (doc.get("@type", []) if isinstance(doc.get("@type"), list) else [doc.get("@type", "")])):
-             raise StructuralValidationError("completion rows are derived from ResearchContribution messages only")
+        if not isinstance(doc, dict):
+            raise StructuralValidationError(f"{arguments.document} must contain a JSON object")
+        # Validates the message and its kind before any crate is written
         row = wasteland.contribution_to_completion(
             doc, completed_by=arguments.completed_by, hop_uri=arguments.hop_uri
         )
