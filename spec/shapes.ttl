@@ -66,9 +66,10 @@ rcp:MetadataDescriptorShape a sh:NodeShape ;
         FILTER NOT EXISTS {
           ?root schema:hasPart ?file .
           ?file a schema:MediaObject ;
-                schema:encodingFormat "application/ld+json" ;
+                schema:encodingFormat ?format ;
                 rcp:digest ?digest ;
                 schema:about ?msgId .
+          FILTER (STR(?format) = "application/ld+json" || STRSTARTS(STR(?format), "application/ld+json;"))
           { ?action schema:object ?file } UNION { ?action schema:result ?file }
           ?action a schema:CreateAction .
         }
@@ -116,7 +117,8 @@ rcp:CreateActionCarrierShape a sh:NodeShape ;
         FILTER (STR(?desc) = "ro-crate-metadata.json" || STRENDS(STR(?desc), "/ro-crate-metadata.json"))
         ?root schema:hasPart ?file .
         ?file a schema:MediaObject ;
-              schema:encodingFormat "application/ld+json" .
+              schema:encodingFormat ?format .
+        FILTER (STR(?format) = "application/ld+json" || STRSTARTS(STR(?format), "application/ld+json;"))
         { ?this schema:object ?file } UNION { ?this schema:result ?file }
       }
     """ ;

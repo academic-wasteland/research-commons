@@ -8,7 +8,12 @@ from typing import Any
 from pyshacl import validate
 from rdflib import Graph
 
-from .constants import RO_CRATE_BASE_CONTEXT, SPEC_ROOT
+from .constants import (
+    CARRIER_CONTEXT,
+    RO_CRATE_BASE_CONTEXT,
+    RO_CRATE_CONTEXT_IRI,
+    SPEC_ROOT,
+)
 from .schema import load_json
 
 
@@ -44,76 +49,50 @@ def validate_shacl(document: dict[str, Any]) -> ShaclResult:
     return ShaclResult(bool(conforms), str(report))
 
 
-def _validate_and_resolve_context_element(
-    ctx: Any,
-    expected_iris: set[str],
-    local_rcp_context: dict[str, Any],
-) -> Any:
+def _validate_and_resolve_context_element(ctx: Any) -> Any:
     if isinstance(ctx, str):
-        if ctx not in expected_iris:
+        if ctx != RO_CRATE_CONTEXT_IRI:
             raise ValueError(f"Unsupported external context in RO-Crate metadata: {ctx}")
-        if ctx == "https://w3id.org/ro/crate/1.1/context":
-            return RO_CRATE_BASE_CONTEXT
-        if ctx == "https://w3id.org/research-commons/v0.1/context.jsonld":
-            return local_rcp_context
-        return ctx
+        # The vendored copy is the RO-Crate 1.1 context document itself; using it avoids
+        # a network lookup without changing any term definition.
+        return RO_CRATE_BASE_CONTEXT
     if isinstance(ctx, dict):
-        expected_overrides = {
-            "object": {"@id": "http://schema.org/object", "@type": "@id"},
-            "name": "http://schema.org/name",
-            "license": {"@id": "http://schema.org/license", "@type": "@id"},
-        }
-        for key, val in ctx.items():
-            if key not in expected_overrides or val != expected_overrides[key]:
-                raise ValueError(f"Unsupported context term override in RO-Crate metadata: {key}={val}")
+        if ctx != CARRIER_CONTEXT:
+            raise ValueError(f"Unsupported inline context in RO-Crate metadata: {ctx!r}")
         return ctx
     raise TypeError(f"Unsupported context entry in RO-Crate metadata: {ctx!r}")
 
 
-def _recursively_sanitize_contexts(
-    node: Any,
-    expected_iris: set[str],
-    local_rcp_context: dict[str, Any],
-) -> Any:
+def _recursively_sanitize_contexts(node: Any) -> Any:
     if isinstance(node, dict):
         sanitized = {}
         for key, val in node.items():
             if key == "@context":
                 if isinstance(val, list):
-                    sanitized[key] = [
-                        _validate_and_resolve_context_element(elem, expected_iris, local_rcp_context)
-                        for elem in val
-                    ]
+                    sanitized[key] = [_validate_and_resolve_context_element(elem) for elem in val]
                 else:
-                    sanitized[key] = _validate_and_resolve_context_element(
-                        val, expected_iris, local_rcp_context
-                    )
+                    sanitized[key] = _validate_and_resolve_context_element(val)
             else:
-                sanitized[key] = _recursively_sanitize_contexts(val, expected_iris, local_rcp_context)
+                sanitized[key] = _recursively_sanitize_contexts(val)
         return sanitized
     if isinstance(node, list):
-        return [
-            _recursively_sanitize_contexts(item, expected_iris, local_rcp_context)
-            for item in node
-        ]
+        return [_recursively_sanitize_contexts(item) for item in node]
     return node
 
 
 def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
-    """Build RDF Graph for an RO-Crate metadata document using local context definitions."""
-    # Ensure declared top-level @context does not contain unsupported or overriding external contexts
+    """Build RDF Graph for an RO-Crate metadata document.
+
+    Only the RO-Crate 1.1 context IRI (resolved from its vendored copy) and the inline
+    carrier context are accepted, at the top level and in nested entities; any other
+    context entry is rejected, so parsing never fetches remote contexts and the graph
+    has the same term definitions a standard JSON-LD processor would use.
+    """
     declared_context = metadata.get("@context")
     if not isinstance(declared_context, list):
         raise TypeError("RO-Crate metadata must have a list @context")
 
-    expected_iris = {
-        "https://w3id.org/ro/crate/1.1/context",
-        "https://w3id.org/research-commons/v0.1/context.jsonld",
-    }
-    local_rcp_context = load_json(SPEC_ROOT / "context.jsonld")["@context"]
-
-    # Recursively validate and resolve @context at top level and any nested entities
-    expanded = _recursively_sanitize_contexts(metadata, expected_iris, local_rcp_context)
+    expanded = _recursively_sanitize_contexts(metadata)
     graph = Graph()
     graph.parse(data=json.dumps(expanded), format="json-ld")
     return graph

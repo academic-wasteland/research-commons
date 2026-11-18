@@ -82,10 +82,16 @@ else:
         "result": {"@id": "http://schema.org/result", "@type": "@id"},
     }
 
-WFRUN_PROCESS_CONTEXT = {
-    "@version": 1.1,
-    "ProcessRun": "https://w3id.org/ro/wfrun/process/0.1#ProcessRun",
-    "WorkflowRun": "https://w3id.org/ro/wfrun/workflow/0.1#WorkflowRun",
-    "ComputationalWorkflow": "https://bioschemas.org/ComputationalWorkflow",
-}
+RO_CRATE_SPEC = "https://w3id.org/ro/crate/1.1"
+RO_CRATE_CONTEXT_IRI = f"{RO_CRATE_SPEC}/context"
+PROCESS_RUN_PROFILE = "https://w3id.org/ro/wfrun/process/0.5"
 
+# Self-contained carrier context, embedded inline in every crate after the RO-Crate 1.1
+# context. It only adds the RCP namespace prefix and the canonical digest slot, so it
+# needs no network lookup and redefines none of the schema.org terms of RO-Crate 1.1
+# (unlike the full RCP message context, which maps Person, Organization, name, license
+# and object to RCP terms).
+CARRIER_CONTEXT = {
+    "rcp": RCP,
+    "digest": "rcp:digest",
+}

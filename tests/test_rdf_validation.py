@@ -268,13 +268,13 @@ def test_ro_crate_builder_and_serialization(repository_root, tmp_path):
     carried_file = json.loads(message_path.read_text(encoding="utf-8"))
     assert carried_file["@id"] == task_doc["@id"]
     
-    # Check typing preservation of agent
+    # The producer keeps its RCP type: rcp:Agent is not a subtype of Person
     action = next(e for e in metadata["@graph"] if e.get("@type") == "CreateAction")
     agent = action.get("agent")
     assert agent
     agent_id = agent["@id"]
     agent_entity = next(e for e in metadata["@graph"] if e.get("@id") == agent_id)
-    assert agent_entity["@type"] == "Person"
+    assert agent_entity["@type"] == "rcp:Agent"
 
     # Carrier SHACL validation
     shacl_result = validate_crate_shacl(metadata)
@@ -899,7 +899,7 @@ def test_ro_crate_workflow_run_profile_declaration(repository_root, tmp_path):
     root_entity = next(e for e in metadata["@graph"] if e.get("@id") == "./")
     conforms = [c.get("@id") for c in root_entity.get("conformsTo", []) if isinstance(c, dict)]
     assert "https://w3id.org/ro/crate/1.1" in conforms
-    assert "https://w3id.org/ro/wfrun/process/0.1" in conforms
+    assert "https://w3id.org/ro/wfrun/process/0.5" in conforms
     assert any("ro-crate-rcp-profile.json" in c for c in conforms)
 
     # For default crates without workflow_tool, process run profile should not be falsely claimed
@@ -908,7 +908,7 @@ def test_ro_crate_workflow_run_profile_declaration(repository_root, tmp_path):
     plain_meta = json.loads((plain_crate_dir / ROCrateBuilder.METADATA_FILENAME).read_text(encoding="utf-8"))
     plain_root = next(e for e in plain_meta["@graph"] if e.get("@id") == "./")
     plain_conforms = [c.get("@id") for c in plain_root.get("conformsTo", []) if isinstance(c, dict)]
-    assert "https://w3id.org/ro/wfrun/process/0.1" not in plain_conforms
+    assert "https://w3id.org/ro/wfrun/process/0.5" not in plain_conforms
 
 
 def test_ro_crate_to_completion_rejects_task_without_emitting_crate(repository_root, tmp_path):

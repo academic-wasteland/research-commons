@@ -15,7 +15,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .constants import RCP
+from .constants import (
+    CARRIER_CONTEXT,
+    PROCESS_RUN_PROFILE,
+    RCP,
+    RO_CRATE_CONTEXT_IRI,
+    RO_CRATE_SPEC,
+)
 from .ledger import canonical_json, document_digest, root_types
 from .rdf_validation import validate_crate_shacl
 from .schema import load_json, validate_against, validate_message
@@ -49,7 +55,10 @@ def build_crate(
     Accepts an RCP message as a dict or raw JSON string/bytes (preserving verbatim bytes),
     and accepts either a directory path or a `.zip` archive destination path.
     An optional `workflow_tool` (e.g. SoftwareApplication or ComputationalWorkflow)
-    can be provided to populate the CreateAction instrument.
+    can be provided to populate the CreateAction instrument; the crate then also declares
+    Process Run Crate 0.5 conformance.
+    The metadata uses the RO-Crate 1.1 context plus the inline `CARRIER_CONTEXT` only, so
+    it resolves without RCP-hosted documents and keeps every RO-Crate term's meaning.
     If `overwrite` is False, pre-existing archive files or non-empty directories raise ValueError.
     """
     if isinstance(rcp_message, (str, bytes)):
@@ -97,18 +106,16 @@ def build_crate(
             message_doc, msg_id, types, digest, workflow_tool=workflow_tool
         )
 
-        conforms_to = [
-            {"@id": "https://w3id.org/ro/crate/1.1"},
-            {"@id": PROFILE_ID},
-        ]
+        profile_ids = [RO_CRATE_SPEC, PROFILE_ID]
         if workflow_tool is not None and instrument_entity is not None:
-            conforms_to.insert(1, {"@id": "https://w3id.org/ro/wfrun/process/0.1"})
+            profile_ids.insert(1, PROCESS_RUN_PROFILE)
+        conforms_to = [{"@id": profile_id} for profile_id in profile_ids]
 
         graph: list[dict[str, Any]] = [
             {
                 "@id": METADATA_FILENAME,
                 "@type": "CreativeWork",
-                "conformsTo": {"@id": "https://w3id.org/ro/crate/1.1"},
+                "conformsTo": {"@id": RO_CRATE_SPEC},
                 "about": {"@id": "./"},
             },
             {
@@ -139,36 +146,24 @@ def build_crate(
 
         agent_info = message_doc.get("producedBy") or message_doc.get("requestedBy") or message_doc.get("completed_by") or message_doc.get("creator") or message_doc.get("agent")
         if isinstance(agent_info, dict) and agent_info.get("@id"):
-            raw_type = agent_info.get("@type")
-            if isinstance(raw_type, list):
-                entity_type = raw_type if raw_type else "Person"
-            elif isinstance(raw_type, str):
-                entity_type = raw_type
-            else:
-                entity_type = "Person"
-            if entity_type not in ("Person", "Organization") and (not isinstance(entity_type, list) or not set(entity_type).intersection({"Person", "Organization"})):
-                entity_type = "Person"
-            graph.append(
-                {
-                    "@id": agent_info["@id"],
-                    "@type": entity_type,
-                    "name": agent_info.get("name", "Agent"),
-                }
-            )
+            agent_entity: dict[str, Any] = {
+                "@id": agent_info["@id"],
+                "name": agent_info.get("name", "Agent"),
+            }
+            agent_types = _crate_agent_types(agent_info.get("@type"))
+            if agent_types:
+                agent_entity["@type"] = agent_types[0] if len(agent_types) == 1 else agent_types
+            graph.append(agent_entity)
 
         if instrument_entity is not None:
             graph.append(instrument_entity)
 
+        # Contextual entities for every profile the root conforms to (RO-Crate 1.1, sec. 4.1;
+        # required by Process Run Crate 0.5)
+        graph.extend(_profile_entity(profile_id) for profile_id in profile_ids)
+
         crate_metadata: dict[str, Any] = {
-            "@context": [
-                "https://w3id.org/ro/crate/1.1/context",
-                "https://w3id.org/research-commons/v0.1/context.jsonld",
-                {
-                    "object": {"@id": "http://schema.org/object", "@type": "@id"},
-                    "name": "http://schema.org/name",
-                    "license": {"@id": "http://schema.org/license", "@type": "@id"},
-                },
-            ],
+            "@context": [RO_CRATE_CONTEXT_IRI, dict(CARRIER_CONTEXT)],
             "@graph": graph,
         }
 
@@ -408,6 +403,55 @@ class ROCrateBuilder:
         overwrite: bool = False,
     ) -> Path:
         return build_crate(rcp_message, output_target, workflow_tool=workflow_tool, overwrite=overwrite)
+
+
+_PROFILE_NAMES = {
+    RO_CRATE_SPEC: ("RO-Crate Metadata Specification", "1.1"),
+    PROCESS_RUN_PROFILE: ("Process Run Crate", "0.5"),
+    PROFILE_ID: ("Research Commons Protocol RO-Crate carrier profile", "0.1"),
+}
+
+# RCP actor types that have a schema.org counterpart in the RO-Crate 1.1 context
+_SCHEMA_ACTOR_TYPES = {
+    "Person": "Person",
+    f"{RCP}Person": "Person",
+    "Organization": "Organization",
+    f"{RCP}Organization": "Organization",
+}
+
+
+def _profile_entity(profile_id: str) -> dict[str, Any]:
+    name, version = _PROFILE_NAMES[profile_id]
+    return {"@id": profile_id, "@type": "CreativeWork", "name": name, "version": version}
+
+
+def _crate_agent_types(raw_type: Any) -> list[str]:
+    """Map the producer's RCP types onto crate types without changing their meaning.
+
+    Every RCP type keeps its RCP IRI via the carrier context's `rcp` prefix (e.g. Agent,
+    a sibling of Person rather than a subtype, stays `rcp:Agent`). RCP Person and
+    Organization additionally get the schema.org type of the RO-Crate context, which
+    RO-Crate consumers expect for agents. Absolute IRIs are kept as they are.
+    """
+    values = raw_type if isinstance(raw_type, list) else [raw_type]
+    mapped: list[str] = []
+    for value in values:
+        if not isinstance(value, str) or not value:
+            continue
+        if value.startswith(RCP):
+            local_name = value[len(RCP):]
+        elif ":" not in value:
+            local_name = value
+        else:
+            local_name = None
+        crate_types = [value] if local_name is None else [f"rcp:{local_name}"]
+        if value in _SCHEMA_ACTOR_TYPES:
+            crate_types.insert(0, _SCHEMA_ACTOR_TYPES[value])
+        for crate_type in crate_types:
+            if crate_type in mapped:
+                continue
+            mapped.append(crate_type)
+    return mapped
 
 
 def _derive_action_id(msg_id: str | None) -> str:

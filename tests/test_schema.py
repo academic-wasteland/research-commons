@@ -89,7 +89,7 @@ def test_ro_crate_profile_schema_enforces_metadata_descriptor_conforms_to(reposi
             "about": {"@id": "https://example.org/task-1"},
         },
         {
-            "@id": "#action",
+            "@id": "#action-0123456789ab",
             "@type": "CreateAction",
             "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         },
@@ -97,12 +97,17 @@ def test_ro_crate_profile_schema_enforces_metadata_descriptor_conforms_to(reposi
     invalid_crate = {
         "@context": [
             "https://w3id.org/ro/crate/1.1/context",
-            "https://w3id.org/research-commons/v0.1/context.jsonld",
+            {"rcp": "https://w3id.org/research-commons/v0.1/", "digest": "rcp:digest"},
         ],
         "@graph": valid_graph,
     }
     with pytest.raises(StructuralValidationError):
         validate_against(invalid_crate, "ro-crate-rcp-profile.json")
+
+    # Control: the same crate with the RO-Crate 1.1 descriptor URI is valid, so the
+    # rejection above comes from the descriptor's conformsTo alone
+    valid_graph[0]["conformsTo"] = {"@id": "https://w3id.org/ro/crate/1.1"}
+    validate_against(invalid_crate, "ro-crate-rcp-profile.json")
 
 
 def test_ro_crate_profile_schema_enforces_metadata_descriptor(repository_root):
@@ -126,7 +131,7 @@ def test_ro_crate_profile_schema_enforces_metadata_descriptor(repository_root):
             "about": {"@id": "https://example.org/task-1"},
         },
         {
-            "@id": "#action",
+            "@id": "#action-0123456789ab",
             "@type": "CreateAction",
             "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         },
@@ -134,7 +139,7 @@ def test_ro_crate_profile_schema_enforces_metadata_descriptor(repository_root):
     missing_desc = {
         "@context": [
             "https://w3id.org/ro/crate/1.1/context",
-            "https://w3id.org/research-commons/v0.1/context.jsonld",
+            {"rcp": "https://w3id.org/research-commons/v0.1/", "digest": "rcp:digest"},
         ],
         "@graph": valid_graph_without_descriptor,
     }
@@ -147,7 +152,7 @@ def test_ro_crate_profile_schema_enforces_required_entities(repository_root):
     invalid_crate = {
         "@context": [
             "https://w3id.org/ro/crate/1.1/context",
-            "https://w3id.org/research-commons/v0.1/context.jsonld",
+            {"rcp": "https://w3id.org/research-commons/v0.1/", "digest": "rcp:digest"},
         ],
         "@graph": [{"@id": "./", "@type": "Dataset"}],
     }
@@ -191,7 +196,7 @@ def test_ro_crate_profile_schema_enforces_date_published_format(repository_root)
         valid_crate = {
             "@context": [
                 "https://w3id.org/ro/crate/1.1/context",
-                "https://w3id.org/research-commons/v0.1/context.jsonld",
+                {"rcp": "https://w3id.org/research-commons/v0.1/", "digest": "rcp:digest"},
             ],
             "@graph": valid_graph,
         }
@@ -232,7 +237,7 @@ def test_ro_crate_profile_schema_enforces_date_published_format(repository_root)
         invalid_crate = {
             "@context": [
                 "https://w3id.org/ro/crate/1.1/context",
-                "https://w3id.org/research-commons/v0.1/context.jsonld",
+                {"rcp": "https://w3id.org/research-commons/v0.1/", "digest": "rcp:digest"},
             ],
             "@graph": invalid_graph,
         }
@@ -267,13 +272,13 @@ def test_ro_crate_profile_schema_enforces_required_context_iris(repository_root)
             "about": {"@id": "https://example.org/task-1"},
         },
         {
-            "@id": "#action",
+            "@id": "#action-0123456789ab",
             "@type": "CreateAction",
             "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         },
     ]
 
-    # Missing RCP context
+    # Missing inline carrier context
     missing_rcp = {
         "@context": ["https://w3id.org/ro/crate/1.1/context"],
         "@graph": valid_graph,
@@ -283,7 +288,7 @@ def test_ro_crate_profile_schema_enforces_required_context_iris(repository_root)
 
     # Missing RO-Crate context
     missing_ro_crate = {
-        "@context": ["https://w3id.org/research-commons/v0.1/context.jsonld"],
+        "@context": [{"rcp": "https://w3id.org/research-commons/v0.1/", "digest": "rcp:digest"}],
         "@graph": valid_graph,
     }
     with pytest.raises(StructuralValidationError):

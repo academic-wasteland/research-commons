@@ -7,33 +7,14 @@
   "required": ["@context", "@graph"],
   "properties": {
     "@context": {
+      "description": "The RO-Crate 1.1 context IRI followed by the self-contained inline carrier context; no other (remote) context is allowed, so the metadata resolves without RCP-hosted documents",
       "type": "array",
-      "items": {
-        "oneOf": [
-          {
-            "type": "string",
-            "enum": [
-              "https://w3id.org/ro/crate/1.1/context",
-              "https://w3id.org/research-commons/v0.1/context.jsonld"
-            ]
-          },
-          {
-            "type": "object"
-          }
-        ]
-      },
-      "allOf": [
-        {
-          "contains": {
-            "const": "https://w3id.org/ro/crate/1.1/context"
-          }
-        },
-        {
-          "contains": {
-            "const": "https://w3id.org/research-commons/v0.1/context.jsonld"
-          }
-        }
-      ]
+      "prefixItems": [
+        {"const": "https://w3id.org/ro/crate/1.1/context"},
+        {"$ref": "#/definitions/carrierContext"}
+      ],
+      "items": false,
+      "minItems": 2
     },
     "@graph": {
       "type": "array",
@@ -84,8 +65,14 @@
         "SoftwareApplication": "http://schema.org/SoftwareApplication"
       },
       "contextCompatibility": {
-        "contextIri": "https://w3id.org/research-commons/v0.1/context.jsonld",
-        "coexistenceNotes": "Maps RCP-specific terms alongside RO-Crate 1.1 context (https://w3id.org/ro/crate/1.1/context). Carrier file uses 'File' ('http://schema.org/MediaObject') and carries rcp:digest ('https://w3id.org/research-commons/v0.1/digest')."
+        "coexistenceNotes": "Crate metadata uses the RO-Crate 1.1 context (https://w3id.org/ro/crate/1.1/context) plus the inline carrier context, which only adds the 'rcp' prefix and 'digest' (rcp:digest, 'https://w3id.org/research-commons/v0.1/digest'). The RCP message context (https://w3id.org/research-commons/v0.1/context.jsonld) is not referenced: it is not independently resolvable and redefines RO-Crate terms (Person, Organization, name, license, object). Carrier file uses 'File' ('http://schema.org/MediaObject'); RCP-only types appear as 'rcp:<Type>'."
+      }
+    },
+    "carrierContext": {
+      "description": "Self-contained inline carrier context",
+      "const": {
+        "rcp": "https://w3id.org/research-commons/v0.1/",
+        "digest": "rcp:digest"
       }
     },
     "canonicalDigestSlot": {
@@ -227,7 +214,11 @@
             {"type": "array", "contains": {"const": "File"}}
           ]
         },
-        "encodingFormat": {"const": "application/ld+json"},
+        "encodingFormat": {
+          "type": "string",
+          "pattern": "^application/ld\\+json(;.*)?$",
+          "description": "JSON-LD media type, optionally with parameters such as profile"
+        },
         "digest": {
           "type": "string",
           "pattern": "^sha256:[0-9a-f]{64}$",
