@@ -199,7 +199,6 @@ def _ledger(arguments: argparse.Namespace) -> int:
         doc = json.loads(raw_bytes.decode("utf-8"))
         if not isinstance(doc, dict):
             raise StructuralValidationError(f"{arguments.document} must contain a JSON object")
-        # Validates the message and its kind before any crate is written
         row = wasteland.contribution_to_completion(
             doc, completed_by=arguments.completed_by, hop_uri=arguments.hop_uri
         )

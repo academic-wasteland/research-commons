@@ -234,7 +234,7 @@ def test_ro_crate_graph_unsupported_context_rejected(repository_root, tmp_path):
     # Attacker appends an overriding context
     metadata["@context"].append("https://attacker.invalid/context.jsonld")
 
-    with pytest.raises(ValueError, match="Unsupported external context|Nested @context|must not carry their own @context|should not be valid under"):
+    with pytest.raises(ValueError, match="Unsupported external context"):
         ro_crate_graph(metadata)
 
 

@@ -87,9 +87,12 @@ def ro_crate_graph(metadata: dict[str, Any]) -> Graph:
     if not isinstance(declared_context, list):
         raise TypeError("RO-Crate metadata must have a list @context")
 
-    for key, val in metadata.items():
-        if key != "@context":
-            _reject_nested_contexts(val)
+    try:
+        for key, val in metadata.items():
+            if key != "@context":
+                _reject_nested_contexts(val)
+    except RecursionError as err:
+        raise ValueError("RO-Crate metadata is nested too deeply") from err
     expanded = {
         **metadata,
         "@context": [_validate_and_resolve_context_element(elem) for elem in declared_context],

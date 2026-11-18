@@ -8,6 +8,7 @@ conformance, carrier SHACL constraints, digest integrity, and message semantics.
 import hashlib
 import json
 import logging
+import re
 import shutil
 import tempfile
 import zipfile
@@ -20,8 +21,10 @@ from .constants import (
     COMPACT_IRIS,
     PROCESS_RUN_PROFILE,
     RCP,
+    RO_CRATE_BASE_CONTEXT,
     RO_CRATE_CONTEXT_IRI,
     RO_CRATE_SPEC,
+    SPEC_ROOT,
 )
 from .ledger import canonical_json, document_digest, root_types
 from .rdf_validation import validate_crate_shacl
@@ -421,29 +424,62 @@ def _profile_entity(profile_id: str) -> dict[str, Any]:
     return {"@id": profile_id, "@type": "CreativeWork", "name": name, "version": version}
 
 
-def _crate_agent_types(raw_type: Any) -> list[str]:
-    """Map the producer's RCP types onto crate types without changing their meaning.
+def _rcp_context_prefixes() -> dict[str, str]:
+    context = load_json(SPEC_ROOT / "context.jsonld")["@context"]
+    return {
+        term: value
+        for term, value in context.items()
+        if isinstance(value, str) and value.endswith(("/", "#")) and not term.startswith("@")
+    }
 
-    RCP terms (compact names from the RCP context, or full RCP IRIs) keep their RCP IRI
-    via the carrier context's `rcp` prefix (e.g. Agent, a sibling of Person rather than a
-    subtype, stays `rcp:Agent`); RCP Person and Organization additionally get the
-    schema.org type of the RO-Crate context, which RO-Crate consumers expect for agents.
-    Absolute IRIs (`scheme://...` or `urn:...`) are kept as they are. Other strings have
-    no defined meaning in the RCP context and are dropped rather than reinterpreted by
-    the RO-Crate context; if nothing is left, the agent is a generic `Thing`.
+
+_RCP_PREFIXES = _rcp_context_prefixes()
+_IRI_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*$")
+
+
+def _expand_rcp_type(value: str) -> str | None:
+    """Expand a type string as the RCP message context would; None if undefined there."""
+    prefix, sep, suffix = value.partition(":")
+    if not sep:
+        return f"{RCP}{value}" if value in COMPACT_IRIS else None
+    if suffix.startswith("//"):
+        return value
+    if prefix in _RCP_PREFIXES:
+        return f"{_RCP_PREFIXES[prefix]}{suffix}"
+    if prefix in RO_CRATE_BASE_CONTEXT or not _IRI_SCHEME.match(prefix):
+        # A CURIE the RCP context does not define, but the RO-Crate context would
+        # reinterpret (e.g. schema:Person), or not an IRI at all
+        return None
+    return value  # absolute IRI with another scheme, e.g. urn:, did:, tag:
+
+
+def _crate_agent_types(raw_type: Any) -> list[str]:
+    """Map the producer's types onto crate types without changing their meaning.
+
+    Each type is first expanded as the RCP message context would expand it (compact RCP
+    terms, CURIEs with the context's prefixes such as `rcp:` or `prov:`, absolute IRIs).
+    RCP IRIs are then written with the carrier context's `rcp` prefix (e.g. Agent, a
+    sibling of Person rather than a subtype, stays `rcp:Agent`); RCP Person and
+    Organization additionally get the schema.org type of the RO-Crate context, which
+    RO-Crate consumers expect for agents. Other IRIs are kept as absolute IRIs. Strings
+    the RCP context leaves undefined are dropped rather than reinterpreted by the
+    RO-Crate context; if nothing is left, the agent is a generic `Thing`.
     """
     values = raw_type if isinstance(raw_type, list) else [raw_type]
     mapped: list[str] = []
     for value in values:
         if not isinstance(value, str) or not value:
             continue
-        local_name = value.removeprefix(RCP)
-        if local_name in COMPACT_IRIS:
-            if local_name in _SCHEMA_ACTOR_TYPES:
-                mapped.append(local_name)
-            mapped.append(f"rcp:{local_name}")
-        elif "://" in value or value.startswith("urn:"):
-            mapped.append(value)
+        iri = _expand_rcp_type(value)
+        if iri is None:
+            continue
+        local_name = iri.removeprefix(RCP)
+        if local_name == iri:
+            mapped.append(iri)
+            continue
+        if local_name in _SCHEMA_ACTOR_TYPES:
+            mapped.append(local_name)
+        mapped.append(f"rcp:{local_name}")
     return list(dict.fromkeys(mapped)) or ["Thing"]
 
 
