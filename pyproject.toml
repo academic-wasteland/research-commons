@@ -10,19 +10,22 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 dependencies = [
-  "jsonschema>=4.23,<5",
+  "jsonschema[format-nongpl]>=4.23,<5",
   "pyshacl>=0.30,<1",
   "rdflib>=7.1,<8",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3,<9"]
+dev = ["pytest>=8.3,<9", "roc-validator==0.11.4"]
 
 [project.scripts]
 research-commons = "research_commons.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/research_commons"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"spec" = "research_commons/spec"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -2,6 +2,7 @@
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix schema: <http://schema.org/> .
 
 <https://w3id.org/research-commons/v0.1/ontology> a owl:Ontology .
 
@@ -45,3 +46,15 @@ rcp:delegatesTo a owl:ObjectProperty .
 rcp:authorizes a owl:ObjectProperty .
 rcp:effectiveAuthorization a owl:ObjectProperty ;
   owl:propertyChainAxiom ( [ owl:inverseOf rcp:delegatesTo ] rcp:authorizes ) .
+
+schema:Dataset a owl:Class .
+schema:MediaObject a owl:Class .
+schema:CreateAction a owl:Class .
+schema:SoftwareApplication a owl:Class .
+schema:hasPart a owl:ObjectProperty .
+schema:object a owl:ObjectProperty .
+schema:result a owl:ObjectProperty .
+schema:instrument a owl:ObjectProperty .
+schema:agent a owl:ObjectProperty .
+rcp:digest a owl:DatatypeProperty .
+

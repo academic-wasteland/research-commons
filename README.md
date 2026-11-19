@@ -134,6 +134,14 @@ uv run research-commons to-bead examples/metagenomics/task.jsonld | bd import -
 uv run research-commons to-wanted examples/metagenomics/task.jsonld --posted-by <rig> --sql
 ```
 
+RO-Crate carriers (see `docs/architecture.md`; the RO-Crate conformance tests
+run by `uv run pytest` need network access to w3id.org):
+
+```bash
+uv run research-commons to-crate examples/metagenomics/task.jsonld task-crate.zip
+uv run research-commons from-crate task-crate.zip
+```
+
 ## Repository layout
 
 ```text
